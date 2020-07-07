@@ -73,6 +73,7 @@ extern "C" HRESULT CoreInitialize(
     BYTE* pbBuffer = NULL;
     SIZE_T cbBuffer = 0;
     BURN_CONTAINER_CONTEXT containerContext = { };
+    DPIU_AWARENESS dpiuAwareness = DPIU_AWARENESS_PERMONITORV2;
     BOOL fElevated = FALSE;
     LPWSTR sczSourceProcessPath = NULL;
     LPWSTR sczSourceProcessFolder = NULL;
@@ -95,6 +96,10 @@ extern "C" HRESULT CoreInitialize(
 
     hr = ManifestLoadXmlFromBuffer(pbBuffer, cbBuffer, pEngineState);
     ExitOnFailure(hr, "Failed to load manifest.");
+
+    // TODO: send value from manifest
+    hr = DpiuSetProcessDpiAwareness(dpiuAwareness, &dpiuAwareness);
+    ExitTraceSource(DUTIL_SOURCE_DEFAULT, hr, "Failed to set DPI awareness to %u", dpiuAwareness);
 
     // Parse command line.
     hr = ParseCommandLine(pEngineState->argc, pEngineState->argv, &pEngineState->command, &pEngineState->companionConnection, &pEngineState->embeddedConnection, &pEngineState->variables, &pEngineState->mode, &pEngineState->automaticUpdates, &pEngineState->fDisableSystemRestore, &sczSourceProcessPath, &sczOriginalSource, &pEngineState->fDisableUnelevate, &pEngineState->log.dwAttributes, &pEngineState->log.sczPath, &pEngineState->registration.sczActiveParent, &pEngineState->sczIgnoreDependencies, &pEngineState->registration.sczAncestors, &sczSanitizedCommandLine);

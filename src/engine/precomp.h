@@ -23,6 +23,7 @@
 #include <lmcons.h>
 #include <wininet.h>
 #include <stddef.h>
+#include <ShellScalingApi.h>
 
 #include <dutilsources.h>
 
@@ -36,6 +37,7 @@
 #include <certutil.h>
 #include <cryputil.h>
 #include <dirutil.h>
+#include <dpiutil.h>
 #include <fileutil.h>
 #include <gdiputil.h>
 #include <guidutil.h>
