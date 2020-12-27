@@ -77,4 +77,11 @@
       <Filter>Resource Files</Filter>
     </ResourceCompile>
   </ItemGroup>
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)..\_common\xunit.runner.visualstudio.testadapter.dll" />
+    <None Include="$(MSBuildThisFileDirectory)..\_common\xunit.runner.reporters.net452.dll" />
+    <None Include="$(MSBuildThisFileDirectory)..\_common\xunit.runner.utility.net452.dll" />
+    <None Include="$(MSBuildThisFileDirectory)..\_common\xunit.abstractions.dll" />
+    <None Include="packages.config" />
+  </ItemGroup>
 </Project>
