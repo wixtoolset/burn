@@ -1022,64 +1022,6 @@ LExit:
     return hr;
 }
 
-extern "C" HRESULT MsiEngineBeginTransaction(
-    __in BURN_ROLLBACK_BOUNDARY* pRollbackBoundary
-    )
-{
-    HRESULT hr = S_OK;
-    MSIHANDLE hTransactionHandle = NULL;
-    HANDLE hChangeOfOwnerEvent = NULL;
-
-    LogId(REPORT_STANDARD, MSG_MSI_TRANSACTION_BEGIN, pRollbackBoundary->sczId);
-
-    hr = WiuBeginTransaction(pRollbackBoundary->sczId, 0, &hTransactionHandle, &hChangeOfOwnerEvent, WIU_LOG_DEFAULT | INSTALLLOGMODE_VERBOSE, pRollbackBoundary->sczLogPath);
-
-    if (HRESULT_FROM_WIN32(ERROR_ROLLBACK_DISABLED) == hr)
-    {
-        LogId(REPORT_ERROR, MSG_MSI_TRANSACTIONS_DISABLED);
-    }
-
-    ExitOnFailure(hr, "Failed to begin an MSI transaction");
-
-LExit:
-    ReleaseMsi(hTransactionHandle);
-    ReleaseHandle(hChangeOfOwnerEvent);
-
-    return hr;
-}
-
-extern "C" HRESULT MsiEngineCommitTransaction(
-    __in BURN_ROLLBACK_BOUNDARY* pRollbackBoundary
-    )
-{
-    HRESULT hr = S_OK;
-
-    LogId(REPORT_STANDARD, MSG_MSI_TRANSACTION_COMMIT, pRollbackBoundary->sczId);
-
-    hr = WiuEndTransaction(MSITRANSACTIONSTATE_COMMIT, WIU_LOG_DEFAULT | INSTALLLOGMODE_VERBOSE, pRollbackBoundary->sczLogPath);
-    ExitOnFailure(hr, "Failed to commit the MSI transaction");
-
-LExit:
-
-    return hr;
-}
-
-extern "C" HRESULT MsiEngineRollbackTransaction(
-    __in BURN_ROLLBACK_BOUNDARY* pRollbackBoundary
-    )
-{
-    HRESULT hr = S_OK;
-
-    LogId(REPORT_WARNING, MSG_MSI_TRANSACTION_ROLLBACK, pRollbackBoundary->sczId);
-
-    hr = WiuEndTransaction(MSITRANSACTIONSTATE_ROLLBACK, WIU_LOG_DEFAULT | INSTALLLOGMODE_VERBOSE, pRollbackBoundary->sczLogPath);
-    ExitOnFailure(hr, "Failed to rollback the MSI transaction");
-
-LExit:
-
-    return hr;
-}
-
 extern "C" HRESULT MsiEngineExecutePackage(
     __in_opt HWND hwndParent,
     __in BURN_EXECUTE_ACTION* pExecuteAction,

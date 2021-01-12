@@ -52,15 +52,6 @@ HRESULT MsiEnginePlanAddPackage(
     __in BURN_VARIABLES* pVariables,
     __in_opt HANDLE hCacheEvent
     );
-HRESULT MsiEngineBeginTransaction(
-    __in BURN_ROLLBACK_BOUNDARY* pRollbackBoundary
-    );
-HRESULT MsiEngineCommitTransaction(
-    __in BURN_ROLLBACK_BOUNDARY* pRollbackBoundary
-    );
-HRESULT MsiEngineRollbackTransaction(
-    __in BURN_ROLLBACK_BOUNDARY* pRollbackBoundary
-    );
 HRESULT MsiEngineExecutePackage(
     __in_opt HWND hwndParent,
     __in BURN_EXECUTE_ACTION* pExecuteAction,

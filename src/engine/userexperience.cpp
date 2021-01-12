@@ -1835,6 +1835,32 @@ LExit:
     return hr;
 }
 
+EXTERN_C BAAPI UserExperienceOnPlanMsiTransaction(
+    __in BURN_USER_EXPERIENCE* pUserExperience,
+    __in_z LPCWSTR wzTransactionId,
+    __inout BOOL* pfTransaction
+    )
+{
+    HRESULT hr = S_OK;
+    BA_ONPLANMSITRANSACTION_ARGS args = {};
+    BA_ONPLANMSITRANSACTION_RESULTS results = {};
+
+    args.cbSize = sizeof(args);
+    args.wzTransactionId = wzTransactionId;
+    args.fTransaction = *pfTransaction;
+
+    results.cbSize = sizeof(results);
+    results.fTransaction = *pfTransaction;
+
+    hr = SendBAMessage(pUserExperience, BOOTSTRAPPER_APPLICATION_MESSAGE_ONPLANMSITRANSACTION, &args, &results);
+    ExitOnFailure(hr, "BA OnPlanMsiTransaction failed.");
+
+    *pfTransaction = results.fTransaction;
+
+LExit:
+    return hr;
+}
+
 EXTERN_C BAAPI UserExperienceOnPlanComplete(
     __in BURN_USER_EXPERIENCE* pUserExperience,
     __in HRESULT hrStatus

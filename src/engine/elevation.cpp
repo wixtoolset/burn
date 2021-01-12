@@ -93,6 +93,9 @@ typedef struct _BURN_ELEVATION_CHILD_MESSAGE_CONTEXT
     BURN_VARIABLES* pVariables;
     BURN_REGISTRATION* pRegistration;
     BURN_USER_EXPERIENCE* pUserExperience;
+
+    MSIHANDLE hMsiTrns;
+    HANDLE hMsiTrnsEvent;
 } BURN_ELEVATION_CHILD_MESSAGE_CONTEXT;
 
 
@@ -285,17 +288,17 @@ static HRESULT OnLaunchApprovedExe(
     __in DWORD cbData
     );
 static HRESULT OnMsiBeginTransaction(
-    __in BURN_PACKAGES* pPackages,
+    __in BURN_ELEVATION_CHILD_MESSAGE_CONTEXT* pContext,
     __in BYTE* pbData,
     __in DWORD cbData
     );
 static HRESULT OnMsiCommitTransaction(
-    __in BURN_PACKAGES* pPackages,
+    __in BURN_ELEVATION_CHILD_MESSAGE_CONTEXT* pContext,
     __in BYTE* pbData,
     __in DWORD cbData
     );
 static HRESULT OnMsiRollbackTransaction(
-    __in BURN_PACKAGES* pPackages,
+    __in BURN_ELEVATION_CHILD_MESSAGE_CONTEXT* pContext,
     __in BYTE* pbData,
     __in DWORD cbData
     );
@@ -809,7 +812,8 @@ LExit:
 
 extern "C" HRESULT ElevationMsiBeginTransaction(
     __in HANDLE hPipe,
-    __in BURN_ROLLBACK_BOUNDARY* pRollbackBoundary
+    __in_z LPCWSTR szTransactionId,
+    __in_z LPCWSTR szLogPath
     )
 {
     HRESULT hr = S_OK;
@@ -818,11 +822,11 @@ extern "C" HRESULT ElevationMsiBeginTransaction(
     DWORD dwResult = ERROR_SUCCESS;
 
     // serialize message data
-    hr = BuffWriteString(&pbData, &cbData, pRollbackBoundary->sczId);
+    hr = BuffWriteString(&pbData, &cbData, szTransactionId);
     ExitOnFailure(hr, "Failed to write transaction name to message buffer.");
 
-    hr = BuffWriteString(&pbData, &cbData, pRollbackBoundary->sczLogPath);
-    ExitOnFailure(hr, "Failed to write transaction log path to message buffer.");
+    hr = BuffWriteString(&pbData, &cbData, szLogPath);
+    ExitOnFailure(hr, "Failed writing transaction log path to pipe")
 
     hr = PipeSendMessage(hPipe, BURN_ELEVATION_MESSAGE_TYPE_BEGIN_MSI_TRANSACTION, pbData, cbData, NULL, NULL, &dwResult);
     ExitOnFailure(hr, "Failed to send BURN_ELEVATION_MESSAGE_TYPE_BEGIN_MSI_TRANSACTION message to per-machine process.");
@@ -837,7 +841,7 @@ LExit:
 
 extern "C" HRESULT ElevationMsiCommitTransaction(
     __in HANDLE hPipe,
-    __in BURN_ROLLBACK_BOUNDARY* pRollbackBoundary
+    __in_z LPCWSTR szLogPath
     )
 {
     HRESULT hr = S_OK;
@@ -845,9 +849,8 @@ extern "C" HRESULT ElevationMsiCommitTransaction(
     SIZE_T cbData = 0;
     DWORD dwResult = ERROR_SUCCESS;
 
-    // serialize message data
-    hr = BuffWriteString(&pbData, &cbData, pRollbackBoundary->sczId);
-    ExitOnFailure(hr, "Failed to write transaction name to message buffer.");
+    hr = BuffWriteString(&pbData, &cbData, szLogPath);
+    ExitOnFailure(hr, "Failed writing transaction log path to pipe")
 
     hr = BuffWriteString(&pbData, &cbData, pRollbackBoundary->sczLogPath);
     ExitOnFailure(hr, "Failed to write transaction log path to message buffer.");
@@ -863,7 +866,7 @@ LExit:
 
 extern "C" HRESULT ElevationMsiRollbackTransaction(
     __in HANDLE hPipe,
-    __in BURN_ROLLBACK_BOUNDARY* pRollbackBoundary
+    __in_z LPCWSTR szLogPath
     )
 {
     HRESULT hr = S_OK;
@@ -872,8 +875,8 @@ extern "C" HRESULT ElevationMsiRollbackTransaction(
     DWORD dwResult = ERROR_SUCCESS;
 
     // serialize message data
-    hr = BuffWriteString(&pbData, &cbData, pRollbackBoundary->sczId);
-    ExitOnFailure(hr, "Failed to write transaction name to message buffer.");
+    hr = BuffWriteString(&pbData, &cbData, szLogPath);
+    ExitOnFailure(hr, "Failed writing transaction log path to pipe")
 
     hr = BuffWriteString(&pbData, &cbData, pRollbackBoundary->sczLogPath);
     ExitOnFailure(hr, "Failed to write transaction log path to message buffer.");
@@ -1758,15 +1761,15 @@ static HRESULT ProcessElevatedChildMessage(
     switch (pMsg->dwMessage)
     {
     case BURN_ELEVATION_MESSAGE_TYPE_BEGIN_MSI_TRANSACTION:
-        hrResult = OnMsiBeginTransaction(pContext->pPackages, (BYTE*)pMsg->pvData, pMsg->cbData);
+        hrResult = OnMsiBeginTransaction(pContext, (BYTE*)pMsg->pvData, pMsg->cbData);
         break;
 
     case BURN_ELEVATION_MESSAGE_TYPE_COMMIT_MSI_TRANSACTION:
-        hrResult = OnMsiCommitTransaction(pContext->pPackages, (BYTE*)pMsg->pvData, pMsg->cbData);
+        hrResult = OnMsiCommitTransaction(pContext, (BYTE*)pMsg->pvData, pMsg->cbData);
         break;
 
     case BURN_ELEVATION_MESSAGE_TYPE_ROLLBACK_MSI_TRANSACTION:
-        hrResult = OnMsiRollbackTransaction(pContext->pPackages, (BYTE*)pMsg->pvData, pMsg->cbData);
+        hrResult = OnMsiRollbackTransaction(pContext, (BYTE*)pMsg->pvData, pMsg->cbData);
         break;
 
     case BURN_ELEVATION_MESSAGE_TYPE_APPLY_INITIALIZE:
@@ -3049,34 +3052,29 @@ LExit:
 }
 
 static HRESULT OnMsiBeginTransaction(
-    __in BURN_PACKAGES* pPackages,
+    __in BURN_ELEVATION_CHILD_MESSAGE_CONTEXT* pContext,
     __in BYTE* pbData,
     __in DWORD cbData
     )
 {
     HRESULT hr = S_OK;
     SIZE_T iData = 0;
-    LPWSTR sczId = NULL;
-    LPWSTR sczLogPath = NULL;
-    BURN_ROLLBACK_BOUNDARY* pRollbackBoundary = NULL;
+    LPWSTR szName = NULL;
+    LPWSTR szLogPath = NULL;
 
     // Deserialize message data.
-    hr = BuffReadString(pbData, cbData, &iData, &sczId);
-    ExitOnFailure(hr, "Failed to read rollback boundary id.");
+    hr = BuffReadString(pbData, cbData, &iData, &szName);
+    ExitOnFailure(hr, "Failed to read transaction name.");
 
-    hr = BuffReadString(pbData, cbData, &iData, &sczLogPath);
-    ExitOnFailure(hr, "Failed to read transaction log path.");
+    hr = BuffReadString(pbData, cbData, &iData, &szLogPath);
+    ExitOnFailure(hr, "Failed getting MSI transaction log path");
 
-    PackageFindRollbackBoundaryById(pPackages, sczId, &pRollbackBoundary);
-    ExitOnFailure(hr, "Failed to find rollback boundary: %ls", sczId);
-
-    pRollbackBoundary->sczLogPath = sczLogPath;
-
-    hr = MsiEngineBeginTransaction(pRollbackBoundary);
+    hr = WiuBeginTransaction(szName, 0, &pContext->hMsiTrns, &pContext->hMsiTrnsEvent, WIU_LOG_DEFAULT | INSTALLLOGMODE_VERBOSE, szLogPath);
+    ExitOnFailure(hr, "Failed beginning an MSI transaction");
 
 LExit:
-    ReleaseStr(sczId);
-    ReleaseStr(sczLogPath);
+    ReleaseStr(szName);
+    ReleaseStr(szLogPath);
 
     if (pRollbackBoundary)
     {
@@ -3087,34 +3085,36 @@ LExit:
 }
 
 static HRESULT OnMsiCommitTransaction(
-    __in BURN_PACKAGES* pPackages,
+    __in BURN_ELEVATION_CHILD_MESSAGE_CONTEXT* pContext,
     __in BYTE* pbData,
     __in DWORD cbData
     )
 {
     HRESULT hr = S_OK;
     SIZE_T iData = 0;
-    LPWSTR sczId = NULL;
-    LPWSTR sczLogPath = NULL;
-    BURN_ROLLBACK_BOUNDARY* pRollbackBoundary = NULL;
+    LPWSTR szLogPath = NULL;
 
     // Deserialize message data.
-    hr = BuffReadString(pbData, cbData, &iData, &sczId);
-    ExitOnFailure(hr, "Failed to read rollback boundary id.");
+    hr = BuffReadString(pbData, cbData, &iData, &szLogPath);
+    ExitOnFailure(hr, "Failed getting MSI transaction log path");
 
-    hr = BuffReadString(pbData, cbData, &iData, &sczLogPath);
-    ExitOnFailure(hr, "Failed to read transaction log path.");
+    hr = WiuEndTransaction(MSITRANSACTIONSTATE_COMMIT, WIU_LOG_DEFAULT | INSTALLLOGMODE_VERBOSE, szLogPath);
+    ExitOnFailure(hr, "Failed committing an MSI transaction");
 
-    PackageFindRollbackBoundaryById(pPackages, sczId, &pRollbackBoundary);
-    ExitOnFailure(hr, "Failed to find rollback boundary: %ls", sczId);
+    if (pContext->hMsiTrns)
+    {
+        ::MsiCloseHandle(pContext->hMsiTrns);
+        pContext->hMsiTrns = NULL;
+    }
 
-    pRollbackBoundary->sczLogPath = sczLogPath;
-
-    hr = MsiEngineCommitTransaction(pRollbackBoundary);
+    if (pContext->hMsiTrnsEvent && (pContext->hMsiTrnsEvent != INVALID_HANDLE_VALUE))
+    {
+        ::CloseHandle(pContext->hMsiTrnsEvent);
+        pContext->hMsiTrnsEvent = NULL;
+    }
 
 LExit:
-    ReleaseStr(sczId);
-    ReleaseStr(sczLogPath);
+    ReleaseStr(szLogPath);
 
     if (pRollbackBoundary)
     {
@@ -3125,34 +3125,36 @@ LExit:
 }
 
 static HRESULT OnMsiRollbackTransaction(
-    __in BURN_PACKAGES* pPackages,
+    __in BURN_ELEVATION_CHILD_MESSAGE_CONTEXT* pContext,
     __in BYTE* pbData,
     __in DWORD cbData
     )
 {
     HRESULT hr = S_OK;
     SIZE_T iData = 0;
-    LPWSTR sczId = NULL;
-    LPWSTR sczLogPath = NULL;
-    BURN_ROLLBACK_BOUNDARY* pRollbackBoundary = NULL;
+    LPWSTR szLogPath = NULL;
 
     // Deserialize message data.
-    hr = BuffReadString(pbData, cbData, &iData, &sczId);
-    ExitOnFailure(hr, "Failed to read rollback boundary id.");
+    hr = BuffReadString(pbData, cbData, &iData, &szLogPath);
+    ExitOnFailure(hr, "Failed getting MSI transaction log path");
 
-    hr = BuffReadString(pbData, cbData, &iData, &sczLogPath);
-    ExitOnFailure(hr, "Failed to read transaction log path.");
+    hr = WiuEndTransaction(MSITRANSACTIONSTATE_ROLLBACK, WIU_LOG_DEFAULT | INSTALLLOGMODE_VERBOSE, szLogPath);
+    ExitOnFailure(hr, "Failed rolling back an MSI transaction");
 
-    PackageFindRollbackBoundaryById(pPackages, sczId, &pRollbackBoundary);
-    ExitOnFailure(hr, "Failed to find rollback boundary: %ls", sczId);
+    if (pContext->hMsiTrns)
+    {
+        ::MsiCloseHandle(pContext->hMsiTrns);
+        pContext->hMsiTrns = NULL;
+    }
 
-    pRollbackBoundary->sczLogPath = sczLogPath;
-
-    hr = MsiEngineRollbackTransaction(pRollbackBoundary);
+    if (pContext->hMsiTrnsEvent && (pContext->hMsiTrnsEvent != INVALID_HANDLE_VALUE))
+    {
+        ::CloseHandle(pContext->hMsiTrnsEvent);
+        pContext->hMsiTrnsEvent = NULL;
+    }
 
 LExit:
-    ReleaseStr(sczId);
-    ReleaseStr(sczLogPath);
+    ReleaseStr(szLogPath);
 
     if (pRollbackBoundary)
     {

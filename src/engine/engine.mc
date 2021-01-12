@@ -1088,3 +1088,17 @@ SymbolicName=MSG_PENDING_REBOOT_DETECTED
 Language=English
 A reboot is pending from a prior execution of this bundle: %1!ls!. Apply will be blocked. Continuing...
 .
+
+MessageId=702
+Severity=Warning
+SymbolicName=MSG_UNSUPPORTED_MSI_TRANSACTION
+Language=English
+Not starting an MSI transaction since Windows Installer version on this machine does not support it
+.
+
+MessageId=703
+Severity=Success
+SymbolicName=MSG_UX_DECLINED_MSI_TRANSACTION
+Language=English
+UX voted against MSI transaction on rollback boundary '%1!ls!'
+.
