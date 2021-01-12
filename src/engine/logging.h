@@ -52,6 +52,12 @@ void LoggingOpenFailed();
 
 void LoggingIncrementPackageSequence();
 
+HRESULT LoggingSetMsiTransactionVariable(
+    __in BURN_ROLLBACK_BOUNDARY* pRollbackBoundary,
+    __in BURN_LOGGING* pLog,
+    __in BURN_VARIABLES* pVariables
+    );
+
 HRESULT LoggingSetPackageVariable(
     __in BURN_PACKAGE* pPackage,
     __in_z_opt LPCWSTR wzSuffix,

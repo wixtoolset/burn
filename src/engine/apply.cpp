@@ -34,6 +34,9 @@ typedef struct _BURN_EXECUTE_CONTEXT
     DWORD cExecutedPackages;
     DWORD cExecutePackagesTotal;
     DWORD* pcOverallProgressTicks;
+
+    MSIHANDLE hMsiTrns;
+    HANDLE hMsiTrnsEvent;
 } BURN_EXECUTE_CONTEXT;
 
 
@@ -821,18 +824,20 @@ extern "C" HRESULT ApplyExecute(
                 break;
             }
 
-            // If inside a MSI transaction, roll it back.
-            if (pCheckpoint && pCheckpoint->pActiveRollbackBoundary && pCheckpoint->pActiveRollbackBoundary->fActiveTransaction)
-            {
-                hrRollback = ExecuteMsiRollbackTransaction(pEngineState, pCheckpoint->pActiveRollbackBoundary, &context);
-                IgnoreRollbackError(hrRollback, "Failed rolling back transaction");
-            }
-
             // The action failed, roll back to previous rollback boundary.
             if (pCheckpoint)
             {
-                hrRollback = DoRollbackActions(pEngineState, &context, pCheckpoint->dwId, pRestart);
-                IgnoreRollbackError(hrRollback, "Failed rollback actions");
+                // If inside a MSI transaction, roll it back.
+                if (pCheckpoint->pActiveRollbackBoundary && pCheckpoint->pActiveRollbackBoundary->fActiveTransaction)
+                {
+                    hrRollback = ExecuteMsiRollbackTransaction(pEngineState, pCheckpoint->pActiveRollbackBoundary, &context);
+                    IgnoreRollbackError(hrRollback, "Failed rolling back transaction");
+                }
+                else
+                {
+                    hrRollback = DoRollbackActions(pEngineState, &context, pCheckpoint->dwId, pRestart);
+                    IgnoreRollbackError(hrRollback, "Failed rollback actions");
+                }
             }
 
             // If the rollback boundary is vital, end execution here.
@@ -843,6 +848,7 @@ extern "C" HRESULT ApplyExecute(
             }
 
             // Move forward to next rollback boundary.
+            hr = S_OK;
             fSeekNextRollbackBoundary = TRUE;
         }
     }
@@ -1509,13 +1515,13 @@ static HRESULT DownloadPayload(
     cacheCallback.pfnCancel = NULL; // TODO: set this
     cacheCallback.pv = pProgress;
    
-    authenticationData.pUX = pProgress->pUX;
-    authenticationData.wzPackageOrContainerId = wzPackageOrContainerId;
-    authenticationData.wzPayloadId = wzPayloadId;
-    authenticationCallback.pv =  static_cast<LPVOID>(&authenticationData);
-    authenticationCallback.pfnAuthenticate = &AuthenticationRequired;
+        authenticationData.pUX = pProgress->pUX;
+        authenticationData.wzPackageOrContainerId = wzPackageOrContainerId;
+        authenticationData.wzPayloadId = wzPayloadId;
+        authenticationCallback.pv =  static_cast<LPVOID>(&authenticationData);
+        authenticationCallback.pfnAuthenticate = &AuthenticationRequired;
         
-    hr = DownloadUrl(pDownloadSource, qwDownloadSize, wzDestinationPath, &cacheCallback, &authenticationCallback);
+        hr = DownloadUrl(pDownloadSource, qwDownloadSize, wzDestinationPath, &cacheCallback, &authenticationCallback);
     ExitOnFailure(hr, "Failed attempt to download URL: '%ls' to: '%ls'", pDownloadSource->sczUrl, wzDestinationPath);
 
 LExit:
@@ -1769,6 +1775,12 @@ static HRESULT DoExecuteAction(
             break;
 
         case BURN_EXECUTE_ACTION_TYPE_BEGIN_MSI_TRANSACTION:
+            // Best effort to log transaction
+            if (pExecuteAction->msiTransaction.pRollbackBoundary->sczLogPathVariable && *pExecuteAction->msiTransaction.pRollbackBoundary->sczLogPathVariable)
+            {
+                VariableGetFormatted(&pEngineState->variables, pExecuteAction->msiTransaction.pRollbackBoundary->sczLogPathVariable, &pExecuteAction->msiTransaction.pRollbackBoundary->sczLogPath, NULL);
+            }
+
             hr = ExecuteMsiBeginTransaction(pEngineState, pExecuteAction->msiTransaction.pRollbackBoundary, pContext);
             ExitOnFailure(hr, "Failed to execute begin MSI transaction action.");
             break;
@@ -2256,9 +2268,9 @@ static HRESULT ExecuteDependencyAction(
                     BURN_MSPTARGETPRODUCT* pTargetProduct = pAction->packageDependency.pPackage->Msp.rgTargetProducts + i;
 
                     if (BURN_PACKAGE_REGISTRATION_STATE_IGNORED == pTargetProduct->registrationState)
-                    {
+    {
                         pTargetProduct->registrationState = BURN_PACKAGE_REGISTRATION_STATE_PRESENT;
-                    }
+    }
                 }
             }
             else if (BURN_PACKAGE_REGISTRATION_STATE_IGNORED == pAction->packageDependency.pPackage->installRegistrationState)
@@ -2299,7 +2311,7 @@ LExit:
 static HRESULT ExecuteMsiBeginTransaction(
     __in BURN_ENGINE_STATE* pEngineState,
     __in BURN_ROLLBACK_BOUNDARY* pRollbackBoundary,
-    __in BURN_EXECUTE_CONTEXT* /*pContext*/
+    __in BURN_EXECUTE_CONTEXT* pContext
     )
 {
     HRESULT hr = S_OK;
@@ -2314,14 +2326,16 @@ static HRESULT ExecuteMsiBeginTransaction(
     hr = UserExperienceOnBeginMsiTransactionBegin(&pEngineState->userExperience, pRollbackBoundary->sczId);
     ExitOnRootFailure(hr, "BA aborted execute begin MSI transaction.");
 
+    LogId(REPORT_STANDARD, MSG_MSI_TRANSACTION_BEGIN, pRollbackBoundary->sczId);
+
     if (pEngineState->plan.fPerMachine)
     {
-        hr = ElevationMsiBeginTransaction(pEngineState->companionConnection.hPipe, pRollbackBoundary->sczId);
+        hr = ElevationMsiBeginTransaction(pEngineState->companionConnection.hPipe, pRollbackBoundary->sczId, pRollbackBoundary->sczLogPath);
         ExitOnFailure(hr, "Failed to begin an elevated MSI transaction.");
     }
     else
     {
-        hr = MsiEngineBeginTransaction(pRollbackBoundary->sczId);
+        hr = WiuBeginTransaction(pRollbackBoundary->sczId, 0, &pContext->hMsiTrns, &pContext->hMsiTrnsEvent, WIU_LOG_DEFAULT | INSTALLLOGMODE_VERBOSE, pRollbackBoundary->sczLogPath);
     }
 
     if (SUCCEEDED(hr))
@@ -2343,29 +2357,43 @@ LExit:
 static HRESULT ExecuteMsiCommitTransaction(
     __in BURN_ENGINE_STATE* pEngineState,
     __in BURN_ROLLBACK_BOUNDARY* pRollbackBoundary,
-    __in BURN_EXECUTE_CONTEXT* /*pContext*/
+    __in BURN_EXECUTE_CONTEXT* pContext
     )
 {
     HRESULT hr = S_OK;
-    BOOL fBeginCalled = FALSE;
+    BOOL fCommitCalled = FALSE;
 
     if (!pRollbackBoundary->fActiveTransaction)
     {
         ExitFunction1(hr = E_INVALIDSTATE);
     }
 
-    fBeginCalled = TRUE;
+    fCommitCalled = TRUE;
     hr = UserExperienceOnCommitMsiTransactionBegin(&pEngineState->userExperience, pRollbackBoundary->sczId);
     ExitOnRootFailure(hr, "BA aborted execute commit MSI transaction.");
 
+    LogId(REPORT_STANDARD, MSG_MSI_TRANSACTION_COMMIT, pRollbackBoundary->sczId);
+
     if (pEngineState->plan.fPerMachine)
     {
-        hr = ElevationMsiCommitTransaction(pEngineState->companionConnection.hPipe, pRollbackBoundary->sczId);
+        hr = ElevationMsiCommitTransaction(pEngineState->companionConnection.hPipe, pRollbackBoundary->sczLogPath);
         ExitOnFailure(hr, "Failed to commit an elevated MSI transaction.");
     }
     else
     {
-        hr = MsiEngineCommitTransaction(pRollbackBoundary->sczId);
+        hr = WiuEndTransaction(MSITRANSACTIONSTATE_COMMIT, WIU_LOG_DEFAULT | INSTALLLOGMODE_VERBOSE, pRollbackBoundary->sczLogPath);
+
+        if (pContext->hMsiTrns)
+        {
+            ::MsiCloseHandle(pContext->hMsiTrns);
+            pContext->hMsiTrns = NULL;
+        }
+
+        if (pContext->hMsiTrnsEvent && (pContext->hMsiTrnsEvent != INVALID_HANDLE_VALUE))
+        {
+            ::CloseHandle(pContext->hMsiTrnsEvent);
+            pContext->hMsiTrnsEvent = NULL;
+        }
     }
 
     if (SUCCEEDED(hr))
@@ -2376,7 +2404,7 @@ static HRESULT ExecuteMsiCommitTransaction(
     }
 
 LExit:
-    if (fBeginCalled)
+    if (fCommitCalled)
     {
         UserExperienceOnCommitMsiTransactionComplete(&pEngineState->userExperience, pRollbackBoundary->sczId, hr);
     }
@@ -2387,36 +2415,48 @@ LExit:
 static HRESULT ExecuteMsiRollbackTransaction(
     __in BURN_ENGINE_STATE* pEngineState,
     __in BURN_ROLLBACK_BOUNDARY* pRollbackBoundary,
-    __in BURN_EXECUTE_CONTEXT* /*pContext*/
+    __in BURN_EXECUTE_CONTEXT* pContext
     )
 {
     HRESULT hr = S_OK;
-    BOOL fBeginCalled = FALSE;
+    BOOL fRlbkCalled = FALSE;
 
     if (!pRollbackBoundary->fActiveTransaction)
     {
         ExitFunction();
     }
 
-    fBeginCalled = TRUE;
+    fRlbkCalled = TRUE;
     UserExperienceOnRollbackMsiTransactionBegin(&pEngineState->userExperience, pRollbackBoundary->sczId);
+
+    LogId(REPORT_WARNING, MSG_MSI_TRANSACTION_ROLLBACK, pRollbackBoundary->sczId);
 
     if (pEngineState->plan.fPerMachine)
     {
-        hr = ElevationMsiRollbackTransaction(pEngineState->companionConnection.hPipe, pRollbackBoundary->sczId);
+        hr = ElevationMsiRollbackTransaction(pEngineState->companionConnection.hPipe, pRollbackBoundary->sczLogPath);
         ExitOnFailure(hr, "Failed to rollback an elevated MSI transaction.");
     }
     else
     {
-        hr = MsiEngineRollbackTransaction(pRollbackBoundary->sczId);
+        hr = WiuEndTransaction(MSITRANSACTIONSTATE_ROLLBACK, WIU_LOG_DEFAULT | INSTALLLOGMODE_VERBOSE, pRollbackBoundary->sczLogPath);
+
+        if (pContext->hMsiTrns)
+        {
+            ::MsiCloseHandle(pContext->hMsiTrns);
+            pContext->hMsiTrns = NULL;
+        }
+
+        if (pContext->hMsiTrnsEvent && (pContext->hMsiTrnsEvent != INVALID_HANDLE_VALUE))
+        {
+            ::CloseHandle(pContext->hMsiTrnsEvent);
+            pContext->hMsiTrnsEvent = NULL;
+        }
     }
 
 LExit:
     pRollbackBoundary->fActiveTransaction = FALSE;
 
-    ResetTransactionRegistrationState(pEngineState, FALSE);
-
-    if (fBeginCalled)
+    if (fRlbkCalled)
     {
         UserExperienceOnRollbackMsiTransactionComplete(&pEngineState->userExperience, pRollbackBoundary->sczId, hr);
     }

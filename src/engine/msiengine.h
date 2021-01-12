@@ -53,15 +53,6 @@ HRESULT MsiEnginePlanAddPackage(
     __in_opt HANDLE hCacheEvent,
     __in BOOL fPlanPackageCacheRollback
     );
-HRESULT MsiEngineBeginTransaction(
-    __in LPCWSTR wzName
-    );
-HRESULT MsiEngineCommitTransaction(
-    __in LPCWSTR wzName
-    );
-HRESULT MsiEngineRollbackTransaction(
-    __in LPCWSTR wzName
-    );
 HRESULT MsiEngineExecutePackage(
     __in_opt HWND hwndParent,
     __in BURN_EXECUTE_ACTION* pExecuteAction,

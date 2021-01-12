@@ -358,6 +358,11 @@ BAAPI UserExperienceOnPlanComplete(
     __in BURN_USER_EXPERIENCE* pUserExperience,
     __in HRESULT hrStatus
     );
+BAAPI UserExperienceOnPlanMsiTransaction(
+    __in BURN_USER_EXPERIENCE* pUserExperience,
+    __in_z LPCWSTR wzTransactionId,
+    __inout BOOL *pfTransaction
+    );
 BAAPI UserExperienceOnPlanForwardCompatibleBundle(
     __in BURN_USER_EXPERIENCE* pUserExperience,
     __in_z LPCWSTR wzBundleId,
@@ -468,11 +473,6 @@ BAAPI UserExperienceOnUnregisterBegin(
 BAAPI UserExperienceOnUnregisterComplete(
     __in BURN_USER_EXPERIENCE* pUserExperience,
     __in HRESULT hrStatus
-    );
-HRESULT UserExperienceInterpretResult(
-    __in BURN_USER_EXPERIENCE* pUserExperience,
-    __in DWORD dwAllowedResults,
-    __in int nResult
     );
 int UserExperienceCheckExecuteResult(
     __in BURN_USER_EXPERIENCE* pUserExperience,

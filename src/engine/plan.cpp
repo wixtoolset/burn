@@ -55,6 +55,9 @@ static HRESULT ProcessPackage(
     );
 static HRESULT ProcessPackageRollbackBoundary(
     __in BURN_PLAN* pPlan,
+    __in BURN_VARIABLES* pVariables,
+    __in BURN_USER_EXPERIENCE* pUX,
+    __in BURN_LOGGING* pLog,
     __in_opt BURN_ROLLBACK_BOUNDARY* pEffectiveRollbackBoundary,
     __inout BURN_ROLLBACK_BOUNDARY** ppRollbackBoundary
     );
@@ -406,7 +409,7 @@ extern "C" HRESULT PlanDefaultPackageRequestState(
         if (fFallbackToCache && BOOTSTRAPPER_REQUEST_STATE_CACHE > *pRequestState)
         {
             *pRequestState = BOOTSTRAPPER_REQUEST_STATE_CACHE;
-        }
+    }
     }
 
 LExit:
@@ -509,21 +512,21 @@ extern "C" HRESULT PlanForwardCompatibleBundles(
 
     // Only change the recommendation if an active parent was provided.
     if (pRegistration->sczActiveParent && *pRegistration->sczActiveParent)
-    {
+        {
         // On install, recommend running the forward compatible bundle because there is an active parent. This
         // will essentially register the parent with the forward compatible bundle.
         if (BOOTSTRAPPER_ACTION_INSTALL == action)
-        {
+            {
             fRecommendIgnore = FALSE;
-        }
+            }
         else if (BOOTSTRAPPER_ACTION_UNINSTALL == action ||
                     BOOTSTRAPPER_ACTION_MODIFY == action ||
                     BOOTSTRAPPER_ACTION_REPAIR == action)
-        {
+            {
             // When modifying the bundle, only recommend running the forward compatible bundle if the parent
             // is already registered as a dependent of the provider key.
             if (pRegistration->fParentRegisteredAsDependent)
-            {
+        {
                 fRecommendIgnore = FALSE;
             }
         }
@@ -543,13 +546,13 @@ extern "C" HRESULT PlanForwardCompatibleBundles(
         ExitOnRootFailure(hr, "BA aborted plan forward compatible bundle.");
 
         if (!fIgnoreBundle)
-        {
+    {
             hr = PseudoBundleInitializePassthrough(&pPlan->forwardCompatibleBundle, pCommand, NULL, pRegistration->sczActiveParent, pRegistration->sczAncestors, &pRelatedBundle->package);
             ExitOnFailure(hr, "Failed to initialize pass through bundle.");
 
             pPlan->fEnabledForwardCompatibleBundle = TRUE;
             break;
-        }
+    }
     }
 
 LExit:
@@ -647,7 +650,7 @@ extern "C" HRESULT PlanRegistration(
                 if (E_NOTFOUND != hr)
                 {
                     ExitOnFailure(hr, "Failed to check the dictionary of ignored dependents.");
-                }
+            }
                 else
                 {
                     hr = DictAddKey(sdIgnoreDependents, pDependency->sczKey);
@@ -681,22 +684,22 @@ extern "C" HRESULT PlanRegistration(
                 hr = DictKeyExists(sdIgnoreDependents, pDependent->sczKey);
                 if (E_NOTFOUND == hr)
                 {
-                    hr = S_OK;
+                hr = S_OK;
 
                     // TODO: callback to the BA and let it have the option to ignore this dependent?
                     if (!pPlan->fDisallowRemoval)
-                    {
-                        pPlan->fDisallowRemoval = TRUE; // ensure the registration stays
-                        *pfContinuePlanning = FALSE; // skip the rest of planning.
+            {
+                 pPlan->fDisallowRemoval = TRUE; // ensure the registration stays
+                 *pfContinuePlanning = FALSE; // skip the rest of planning.
 
                         LogId(REPORT_STANDARD, MSG_PLAN_SKIPPED_DUE_TO_DEPENDENTS);
-                    }
+            }
 
                     LogId(REPORT_VERBOSE, MSG_DEPENDENCY_BUNDLE_DEPENDENT, pDependent->sczKey, LoggingStringOrUnknownIfNull(pDependent->sczName));
                 }
-                ExitOnFailure(hr, "Failed to check for remaining dependents during planning.");
-            }
+            ExitOnFailure(hr, "Failed to check for remaining dependents during planning.");
         }
+    }
     }
     else
     {
@@ -716,10 +719,10 @@ extern "C" HRESULT PlanRegistration(
 
             hr = DictKeyExists(sdBundleDependents, pDependent->sczKey);
             if (E_NOTFOUND == hr)
-            {
+        {
                 hr = DictAddKey(sdBundleDependents, pDependent->sczKey);
                 ExitOnFailure(hr, "Failed to add dependent key to bundle dependents.");
-            }
+        }
             ExitOnFailure(hr, "Failed to check the dictionary of bundle dependents.");
         }
 
@@ -755,9 +758,9 @@ extern "C" HRESULT PlanRegistration(
         if (pRegistration->wzSelfDependent && !pRegistration->fSelfRegisteredAsDependent && (pRegistration->sczActiveParent || !fAddonOrPatchBundle))
         {
             hr = AddRegistrationAction(pPlan, BURN_DEPENDENT_REGISTRATION_ACTION_TYPE_REGISTER, pRegistration->wzSelfDependent, pRegistration->sczId);
-            ExitOnFailure(hr, "Failed to add registration action for self dependent.");
+                ExitOnFailure(hr, "Failed to add registration action for self dependent.");
+            }
         }
-    }
 
 LExit:
     ReleaseDict(sdBundleDependents);
@@ -878,7 +881,7 @@ static HRESULT PlanPackagesHelper(
             DWORD iPackage = (BOOTSTRAPPER_ACTION_UNINSTALL == pPlan->action) ? cPackages - 1 - i : i;
             BURN_PACKAGE* pPackage = rgPackages + iPackage;
 
-            hr = PlanCleanPackage(pPlan, pPackage);
+    hr = PlanCleanPackage(pPlan, pPackage);
             ExitOnFailure(hr, "Failed to plan clean package.");
         }
     }
@@ -972,22 +975,22 @@ static HRESULT ProcessPackage(
     BURN_ROLLBACK_BOUNDARY* pEffectiveRollbackBoundary = NULL;
 
     pEffectiveRollbackBoundary = (BOOTSTRAPPER_ACTION_UNINSTALL == pPlan->action) ? pPackage->pRollbackBoundaryBackward : pPackage->pRollbackBoundaryForward;
-    hr = ProcessPackageRollbackBoundary(pPlan, pEffectiveRollbackBoundary, ppRollbackBoundary);
+    hr = ProcessPackageRollbackBoundary(pPlan, pVariables, pUX, pLog, pEffectiveRollbackBoundary, ppRollbackBoundary);
     ExitOnFailure(hr, "Failed to process package rollback boundary.");
 
-    if (BOOTSTRAPPER_ACTION_LAYOUT == pPlan->action)
-    {
-        hr = PlanLayoutPackage(pPlan, pPackage, wzLayoutDirectory);
-        ExitOnFailure(hr, "Failed to plan layout package.");
-    }
-    else
-    {
-        if (BOOTSTRAPPER_REQUEST_STATE_NONE != pPackage->requested)
+        if (BOOTSTRAPPER_ACTION_LAYOUT == pPlan->action)
         {
+            hr = PlanLayoutPackage(pPlan, pPackage, wzLayoutDirectory);
+            ExitOnFailure(hr, "Failed to plan layout package.");
+        }
+        else
+        {
+        if (BOOTSTRAPPER_REQUEST_STATE_NONE != pPackage->requested)
+            {
             // If the package is in a requested state, plan it.
             hr = PlanExecutePackage(fBundlePerMachine, display, pUX, pPlan, pPackage, pLog, pVariables, phSyncpointEvent);
             ExitOnFailure(hr, "Failed to plan execute package.");
-        }
+                }
         else
         {
             // Make sure the package is properly ref-counted even if no plan is requested.
@@ -1009,6 +1012,9 @@ LExit:
 
 static HRESULT ProcessPackageRollbackBoundary(
     __in BURN_PLAN* pPlan,
+    __in BURN_VARIABLES* pVariables,
+    __in BURN_USER_EXPERIENCE* pUX,
+    __in BURN_LOGGING* pLog,
     __in_opt BURN_ROLLBACK_BOUNDARY* pEffectiveRollbackBoundary,
     __inout BURN_ROLLBACK_BOUNDARY** ppRollbackBoundary
     )
@@ -1026,7 +1032,7 @@ static HRESULT ProcessPackageRollbackBoundary(
         }
 
         // Start new rollback boundary.
-        hr = PlanRollbackBoundaryBegin(pPlan, pEffectiveRollbackBoundary);
+        hr = PlanRollbackBoundaryBegin(pPlan, pVariables, pUX, pLog, pEffectiveRollbackBoundary);
         ExitOnFailure(hr, "Failed to plan rollback boundary begin.");
 
         *ppRollbackBoundary = pEffectiveRollbackBoundary;
@@ -1609,7 +1615,7 @@ extern "C" HRESULT PlanCleanPackage(
         if (pPackage->fCanAffectRegistration)
         {
             pPackage->expectedCacheRegistrationState = BURN_PACKAGE_REGISTRATION_STATE_ABSENT;
-        }
+    }
     }
 
 LExit:
@@ -1748,6 +1754,9 @@ LExit:
 
 extern "C" HRESULT PlanRollbackBoundaryBegin(
     __in BURN_PLAN* pPlan,
+    __in BURN_VARIABLES * pVariables,
+    __in BURN_USER_EXPERIENCE * pUX,
+    __in BURN_LOGGING * pLog,
     __in BURN_ROLLBACK_BOUNDARY* pRollbackBoundary
     )
 {
@@ -1756,6 +1765,28 @@ extern "C" HRESULT PlanRollbackBoundaryBegin(
 
     AssertSz(!pPlan->pActiveRollbackBoundary, "PlanRollbackBoundaryBegin called without completing previous RollbackBoundary");
     pPlan->pActiveRollbackBoundary = pRollbackBoundary;
+
+    // Best effort to support MSI transactions
+    pRollbackBoundary->fTransaction = FALSE;
+    if (pRollbackBoundary->fTransactionInManifest)
+    {
+        if (WiuIsMsiTransactionSupported())
+        {
+		    pRollbackBoundary->fTransaction = TRUE;
+
+		    hr = UserExperienceOnPlanMsiTransaction(pUX, pRollbackBoundary->sczId, &pRollbackBoundary->fTransaction);
+		    ExitOnRootFailure(hr, "UX aborted on plan MSI transaction.");
+
+		    if (!pRollbackBoundary->fTransaction)
+		    {
+		        LogId(REPORT_STANDARD, MSG_UX_DECLINED_MSI_TRANSACTION, pRollbackBoundary->sczId);
+		    }
+        }
+        else
+        {
+            LogId(REPORT_WARNING, MSG_UNSUPPORTED_MSI_TRANSACTION);
+        }
+    }
 
     // Add begin rollback boundary to execute plan.
     hr = PlanAppendExecuteAction(pPlan, &pExecuteAction);
@@ -1774,6 +1805,8 @@ extern "C" HRESULT PlanRollbackBoundaryBegin(
     // Add begin MSI transaction to execute plan.
     if (pRollbackBoundary->fTransaction)
     {
+        LoggingSetMsiTransactionVariable(pRollbackBoundary, pLog, pVariables); // ignore errors.
+
         hr = PlanExecuteCheckpoint(pPlan);
         ExitOnFailure(hr, "Failed to append checkpoint before MSI transaction begin action.");
 
@@ -1923,7 +1956,7 @@ static void ResetPlannedPackageState(
 
             pSlipstreamMsp->execute = BOOTSTRAPPER_ACTION_STATE_NONE;
             pSlipstreamMsp->rollback = BOOTSTRAPPER_ACTION_STATE_NONE;
-        }
+    }
     }
     else if (BURN_PACKAGE_TYPE_MSP == pPackage->type && pPackage->Msp.rgTargetProducts)
     {
@@ -2788,7 +2821,7 @@ static void FinalizePatchActions(
     )
 {
     for (DWORD i = 0; i < cActions; ++i)
-    {
+            {
         BURN_EXECUTE_ACTION* pAction = rgActions + i;
 
         if (BURN_EXECUTE_ACTION_TYPE_MSI_PACKAGE == pAction->type)
@@ -2839,14 +2872,14 @@ static void FinalizePatchActions(
                         {
                             pSlipstreamMsp->execute = action;
                             pTargetProduct->executeSkip = BURN_PATCH_SKIP_STATE_SLIPSTREAM;
-                        }
+                }
                         else
                         {
                             pSlipstreamMsp->rollback = action;
                             pTargetProduct->rollbackSkip = BURN_PATCH_SKIP_STATE_SLIPSTREAM;
-                        }
-                    }
-                }
+            }
+        }
+    }
             }
         }
     }
@@ -2863,12 +2896,12 @@ static void CalculateExpectedRegistrationStates(
 
         // MspPackages can have actions throughout the plan, so the plan needed to be finalized before anything could be calculated.
         if (BURN_PACKAGE_TYPE_MSP == pPackage->type && !pPackage->fDependencyManagerWasHere)
-        {
+    {
             pPackage->execute = BOOTSTRAPPER_ACTION_STATE_NONE;
             pPackage->rollback = BOOTSTRAPPER_ACTION_STATE_NONE;
 
             for (DWORD j = 0; j < pPackage->Msp.cTargetProductCodes; ++j)
-            {
+        {
                 BURN_MSPTARGETPRODUCT* pTargetProduct = pPackage->Msp.rgTargetProducts + j;
 
                 // The highest aggregate action state found will be used.
@@ -2878,14 +2911,14 @@ static void CalculateExpectedRegistrationStates(
                 }
 
                 if (pPackage->rollback < pTargetProduct->rollback)
-                {
+            {
                     pPackage->rollback = pTargetProduct->rollback;
                 }
             }
         }
 
         if (pPackage->fCanAffectRegistration)
-        {
+                {
             if (BOOTSTRAPPER_ACTION_STATE_UNINSTALL < pPackage->execute)
             {
                 pPackage->expectedInstallRegistrationState = BURN_PACKAGE_REGISTRATION_STATE_PRESENT;
@@ -2896,27 +2929,27 @@ static void CalculateExpectedRegistrationStates(
             }
 
             if (BURN_DEPENDENCY_ACTION_REGISTER == pPackage->dependencyExecute)
-            {
+                    {
                 if (BURN_PACKAGE_REGISTRATION_STATE_IGNORED == pPackage->expectedCacheRegistrationState)
-                {
+                        {
                     pPackage->expectedCacheRegistrationState = BURN_PACKAGE_REGISTRATION_STATE_PRESENT;
-                }
+                        }
                 if (BURN_PACKAGE_REGISTRATION_STATE_IGNORED == pPackage->expectedInstallRegistrationState)
                 {
                     pPackage->expectedInstallRegistrationState = BURN_PACKAGE_REGISTRATION_STATE_PRESENT;
+                    }
                 }
-            }
             else if (BURN_DEPENDENCY_ACTION_UNREGISTER == pPackage->dependencyExecute)
             {
                 if (BURN_PACKAGE_REGISTRATION_STATE_PRESENT == pPackage->expectedCacheRegistrationState)
                 {
                     pPackage->expectedCacheRegistrationState = BURN_PACKAGE_REGISTRATION_STATE_IGNORED;
-                }
+            }
                 if (BURN_PACKAGE_REGISTRATION_STATE_PRESENT == pPackage->expectedInstallRegistrationState)
                 {
                     pPackage->expectedInstallRegistrationState = BURN_PACKAGE_REGISTRATION_STATE_IGNORED;
-                }
-            }
+        }
+    }
         }
     }
 }
