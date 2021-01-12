@@ -2256,12 +2256,6 @@ static HRESULT DoExecuteAction(
             break;
 
         case BURN_EXECUTE_ACTION_TYPE_BEGIN_MSI_TRANSACTION:
-            // Best effort to log transaction
-            if (pExecuteAction->msiTransaction.pRollbackBoundary->sczLogPathVariable && *pExecuteAction->msiTransaction.pRollbackBoundary->sczLogPathVariable)
-            {
-                VariableGetFormatted(&pEngineState->variables, pExecuteAction->msiTransaction.pRollbackBoundary->sczLogPathVariable, &pExecuteAction->msiTransaction.pRollbackBoundary->sczLogPath, NULL);
-            }
-
             hr = ExecuteMsiBeginTransaction(pEngineState, pExecuteAction->msiTransaction.pRollbackBoundary, pContext);
             ExitOnFailure(hr, "Failed to execute begin MSI transaction action.");
             break;
@@ -2813,12 +2807,12 @@ static HRESULT ExecuteMsiBeginTransaction(
 
     if (pEngineState->plan.fPerMachine)
     {
-        hr = ElevationMsiBeginTransaction(pEngineState->companionConnection.hPipe, pRollbackBoundary->sczId, pRollbackBoundary->sczLogPath);
+        hr = ElevationMsiBeginTransaction(pEngineState->companionConnection.hPipe, pRollbackBoundary->sczId);
         ExitOnFailure(hr, "Failed to begin an elevated MSI transaction.");
     }
     else
     {
-        hr = WiuBeginTransaction(pRollbackBoundary->sczId, 0, &pContext->hMsiTrns, &pContext->hMsiTrnsEvent, WIU_LOG_DEFAULT | INSTALLLOGMODE_VERBOSE, pRollbackBoundary->sczLogPath);
+        hr = MsiEngineBeginTransaction(pRollbackBoundary->sczId, &pContext->hMsiTrns, &pContext->hMsiTrnsEvent, NULL);
     }
 
     if (SUCCEEDED(hr))
@@ -2859,24 +2853,12 @@ static HRESULT ExecuteMsiCommitTransaction(
 
     if (pEngineState->plan.fPerMachine)
     {
-        hr = ElevationMsiCommitTransaction(pEngineState->companionConnection.hPipe, pRollbackBoundary->sczLogPath);
+        hr = ElevationMsiCommitTransaction(pEngineState->companionConnection.hPipe);
         ExitOnFailure(hr, "Failed to commit an elevated MSI transaction.");
     }
     else
     {
-        hr = WiuEndTransaction(MSITRANSACTIONSTATE_COMMIT, WIU_LOG_DEFAULT | INSTALLLOGMODE_VERBOSE, pRollbackBoundary->sczLogPath);
-
-        if (pContext->hMsiTrns)
-        {
-            ::MsiCloseHandle(pContext->hMsiTrns);
-            pContext->hMsiTrns = NULL;
-        }
-
-        if (pContext->hMsiTrnsEvent && (pContext->hMsiTrnsEvent != INVALID_HANDLE_VALUE))
-        {
-            ::CloseHandle(pContext->hMsiTrnsEvent);
-            pContext->hMsiTrnsEvent = NULL;
-        }
+        hr = MsiEngineCommitTransaction(&pContext->hMsiTrns, &pContext->hMsiTrnsEvent, NULL);
     }
 
     if (SUCCEEDED(hr))
@@ -2916,24 +2898,12 @@ static HRESULT ExecuteMsiRollbackTransaction(
 
     if (pEngineState->plan.fPerMachine)
     {
-        hr = ElevationMsiRollbackTransaction(pEngineState->companionConnection.hPipe, pRollbackBoundary->sczLogPath);
+        hr = ElevationMsiRollbackTransaction(pEngineState->companionConnection.hPipe);
         ExitOnFailure(hr, "Failed to rollback an elevated MSI transaction.");
     }
     else
     {
-        hr = WiuEndTransaction(MSITRANSACTIONSTATE_ROLLBACK, WIU_LOG_DEFAULT | INSTALLLOGMODE_VERBOSE, pRollbackBoundary->sczLogPath);
-
-        if (pContext->hMsiTrns)
-        {
-            ::MsiCloseHandle(pContext->hMsiTrns);
-            pContext->hMsiTrns = NULL;
-        }
-
-        if (pContext->hMsiTrnsEvent && (pContext->hMsiTrnsEvent != INVALID_HANDLE_VALUE))
-        {
-            ::CloseHandle(pContext->hMsiTrnsEvent);
-            pContext->hMsiTrnsEvent = NULL;
-        }
+        hr = MsiEngineRollbackTransaction(&pContext->hMsiTrns, &pContext->hMsiTrnsEvent, NULL);
     }
 
 LExit:
