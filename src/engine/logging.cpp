@@ -213,37 +213,6 @@ extern "C" void LoggingIncrementPackageSequence()
     ++vdwPackageSequence;
 }
 
-
-extern "C" HRESULT LoggingSetMsiTransactionVariable(
-    __in BURN_ROLLBACK_BOUNDARY * pRollbackBoundary,
-    __in BURN_LOGGING * pLog,
-    __in BURN_VARIABLES * pVariables
-    )
-{
-    HRESULT hr = S_OK;
-    LPWSTR szLogPath = NULL;
-
-    if (pRollbackBoundary && pRollbackBoundary->sczLogPathVariable && *pRollbackBoundary->sczLogPathVariable)
-    {
-	    if (BURN_LOGGING_STATE_DISABLED == pLog->state)
-	    {
-	        VariableSetString(pVariables, pRollbackBoundary->sczLogPathVariable, L"", FALSE, FALSE);
-	        ExitFunction();
-	    }
-
-        hr = StrAllocFormatted(&szLogPath, L"%ls_%03u_%ls.%ls", pLog->sczPrefix, vdwPackageSequence, pRollbackBoundary->sczId, pLog->sczExtension);
-        ExitOnFailure(hr, "Failed to allocate path for MSI transaction log.");
-
-        hr = VariableSetString(pVariables, pRollbackBoundary->sczLogPathVariable, szLogPath, FALSE, FALSE);
-        ExitOnFailure(hr, "Failed to set log path into variable.");
-    }
-
-LExit:
-    ReleaseStr(szLogPath);
-
-    return hr;
-}
-
 extern "C" HRESULT LoggingSetPackageVariable(
     __in BURN_PACKAGE* pPackage,
     __in_z_opt LPCWSTR wzSuffix,

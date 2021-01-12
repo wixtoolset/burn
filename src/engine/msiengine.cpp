@@ -1015,6 +1015,86 @@ LExit:
     return hr;
 }
 
+extern "C" HRESULT MsiEngineBeginTransaction(
+    __in LPCWSTR wzName,
+    __out MSIHANDLE *phTransactionHandle,
+    __out HANDLE *phChangeOfOwnerEvent,
+    __in_z LPCWSTR szLogPath
+    )
+{
+    HRESULT hr = S_OK;
+
+    hr = WiuBeginTransaction(wzName, 0, phTransactionHandle, phChangeOfOwnerEvent, WIU_LOG_DEFAULT | INSTALLLOGMODE_VERBOSE, szLogPath);
+
+    if (E_ROLLBACK_DISABLED == hr)
+    {
+        LogId(REPORT_ERROR, MSG_MSI_TRANSACTIONS_DISABLED);
+    }
+
+    ExitOnFailure(hr, "Failed to begin an MSI transaction");
+
+LExit:
+    return hr;
+}
+
+extern "C" HRESULT MsiEngineCommitTransaction(
+    __inout MSIHANDLE *phTransactionHandle,
+    __inout HANDLE *phChangeOfOwnerEvent,
+    __in_z LPCWSTR szLogPath
+    )
+{
+    HRESULT hr = S_OK;
+
+    hr = WiuEndTransaction(MSITRANSACTIONSTATE_COMMIT, WIU_LOG_DEFAULT | INSTALLLOGMODE_VERBOSE, szLogPath);
+    ExitOnFailure(hr, "Failed to commit the MSI transaction");
+
+    if (*phTransactionHandle)
+    {
+        ::MsiCloseHandle(*phTransactionHandle);
+        *phTransactionHandle = NULL;
+    }
+
+    if (*phChangeOfOwnerEvent && (*phChangeOfOwnerEvent != INVALID_HANDLE_VALUE))
+    {
+        ::CloseHandle(*phChangeOfOwnerEvent);
+        *phChangeOfOwnerEvent = NULL;
+    }
+
+LExit:
+
+    return hr;
+}
+
+extern "C" HRESULT MsiEngineRollbackTransaction(
+    __inout MSIHANDLE *phTransactionHandle,
+    __inout HANDLE *phChangeOfOwnerEvent,
+    __in_z LPCWSTR szLogPath
+    )
+{
+    HRESULT hr = S_OK;
+
+
+    hr = WiuEndTransaction(MSITRANSACTIONSTATE_ROLLBACK, WIU_LOG_DEFAULT | INSTALLLOGMODE_VERBOSE, szLogPath);
+    ExitOnFailure(hr, "Failed to rollback the MSI transaction");
+
+    if (*phTransactionHandle)
+    {
+        ::MsiCloseHandle(*phTransactionHandle);
+        *phTransactionHandle = NULL;
+    }
+
+    if (*phChangeOfOwnerEvent && (*phChangeOfOwnerEvent != INVALID_HANDLE_VALUE))
+    {
+        ::CloseHandle(*phChangeOfOwnerEvent);
+        *phChangeOfOwnerEvent = NULL;
+    }
+
+
+LExit:
+
+    return hr;
+}
+
 extern "C" HRESULT MsiEngineExecutePackage(
     __in_opt HWND hwndParent,
     __in BURN_EXECUTE_ACTION* pExecuteAction,

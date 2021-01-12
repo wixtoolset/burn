@@ -156,16 +156,13 @@ HRESULT ElevationChildResumeAutomaticUpdates();
 
 HRESULT ElevationMsiBeginTransaction(
     __in HANDLE hPipe,
-    __in_z LPCWSTR szTransactionId,
-    __in_z LPCWSTR szLogPath
+    __in_z LPCWSTR szTransactionId
     );
 HRESULT ElevationMsiCommitTransaction(
-    __in HANDLE hPipe,
-    __in_z LPCWSTR szLogPath
+    __in HANDLE hPipe
     );
 HRESULT ElevationMsiRollbackTransaction(
-    __in HANDLE hPipe,
-    __in_z LPCWSTR szLogPath
+    __in HANDLE hPipe
     );
 
 #ifdef __cplusplus

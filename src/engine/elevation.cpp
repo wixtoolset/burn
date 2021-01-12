@@ -769,8 +769,7 @@ LExit:
 
 extern "C" HRESULT ElevationMsiBeginTransaction(
     __in HANDLE hPipe,
-    __in_z LPCWSTR szTransactionId,
-    __in_z LPCWSTR szLogPath
+    __in_z LPCWSTR szTransactionId
     )
 {
     HRESULT hr = S_OK;
@@ -781,9 +780,6 @@ extern "C" HRESULT ElevationMsiBeginTransaction(
     // serialize message data
     hr = BuffWriteString(&pbData, &cbData, szTransactionId);
     ExitOnFailure(hr, "Failed to write transaction name to message buffer.");
-
-    hr = BuffWriteString(&pbData, &cbData, szLogPath);
-    ExitOnFailure(hr, "Failed writing transaction log path to pipe")
 
     hr = PipeSendMessage(hPipe, BURN_ELEVATION_MESSAGE_TYPE_BEGIN_MSI_TRANSACTION, pbData, cbData, NULL, NULL, &dwResult);
     ExitOnFailure(hr, "Failed to send BURN_ELEVATION_MESSAGE_TYPE_BEGIN_MSI_TRANSACTION message to per-machine process.");
@@ -797,19 +793,13 @@ LExit:
 }
 
 extern "C" HRESULT ElevationMsiCommitTransaction(
-    __in HANDLE hPipe,
-    __in_z LPCWSTR szLogPath
+    __in HANDLE hPipe
     )
 {
     HRESULT hr = S_OK;
-    BYTE* pbData = NULL;
-    SIZE_T cbData = 0;
     DWORD dwResult = ERROR_SUCCESS;
 
-    hr = BuffWriteString(&pbData, &cbData, szLogPath);
-    ExitOnFailure(hr, "Failed writing transaction log path to pipe")
-
-    hr = PipeSendMessage(hPipe, BURN_ELEVATION_MESSAGE_TYPE_COMMIT_MSI_TRANSACTION, pbData, cbData, NULL, NULL, &dwResult);
+    hr = PipeSendMessage(hPipe, BURN_ELEVATION_MESSAGE_TYPE_COMMIT_MSI_TRANSACTION, NULL, 0, NULL, NULL, &dwResult);
     ExitOnFailure(hr, "Failed to send BURN_ELEVATION_MESSAGE_TYPE_COMMIT_MSI_TRANSACTION message to per-machine process.");
 
     hr = static_cast<HRESULT>(dwResult);
@@ -819,20 +809,13 @@ LExit:
 }
 
 extern "C" HRESULT ElevationMsiRollbackTransaction(
-    __in HANDLE hPipe,
-    __in_z LPCWSTR szLogPath
+    __in HANDLE hPipe
     )
 {
     HRESULT hr = S_OK;
-    BYTE* pbData = NULL;
-    SIZE_T cbData = 0;
     DWORD dwResult = ERROR_SUCCESS;
 
-    // serialize message data
-    hr = BuffWriteString(&pbData, &cbData, szLogPath);
-    ExitOnFailure(hr, "Failed writing transaction log path to pipe")
-
-    hr = PipeSendMessage(hPipe, BURN_ELEVATION_MESSAGE_TYPE_ROLLBACK_MSI_TRANSACTION, pbData, cbData, NULL, NULL, &dwResult);
+    hr = PipeSendMessage(hPipe, BURN_ELEVATION_MESSAGE_TYPE_ROLLBACK_MSI_TRANSACTION, NULL, 0, NULL, NULL, &dwResult);
     ExitOnFailure(hr, "Failed to send BURN_ELEVATION_MESSAGE_TYPE_ROLLBACK_MSI_TRANSACTION message to per-machine process.");
 
     hr = static_cast<HRESULT>(dwResult);
@@ -2841,91 +2824,48 @@ static HRESULT OnMsiBeginTransaction(
     HRESULT hr = S_OK;
     SIZE_T iData = 0;
     LPWSTR szName = NULL;
-    LPWSTR szLogPath = NULL;
 
     // Deserialize message data.
     hr = BuffReadString(pbData, cbData, &iData, &szName);
     ExitOnFailure(hr, "Failed to read transaction name.");
 
-    hr = BuffReadString(pbData, cbData, &iData, &szLogPath);
-    ExitOnFailure(hr, "Failed getting MSI transaction log path");
-
-    hr = WiuBeginTransaction(szName, 0, &pContext->hMsiTrns, &pContext->hMsiTrnsEvent, WIU_LOG_DEFAULT | INSTALLLOGMODE_VERBOSE, szLogPath);
+    hr = MsiEngineBeginTransaction(szName, &pContext->hMsiTrns, &pContext->hMsiTrnsEvent, NULL);
     ExitOnFailure(hr, "Failed beginning an MSI transaction");
 
 LExit:
     ReleaseStr(szName);
-    ReleaseStr(szLogPath);
 
     return hr;
 }
 
 static HRESULT OnMsiCommitTransaction(
     __in BURN_ELEVATION_CHILD_MESSAGE_CONTEXT* pContext,
-    __in BYTE* pbData,
-    __in DWORD cbData
+    __in BYTE* /*pbData*/,
+    __in DWORD /*cbData*/
     )
 {
     HRESULT hr = S_OK;
-    SIZE_T iData = 0;
-    LPWSTR szLogPath = NULL;
 
-    // Deserialize message data.
-    hr = BuffReadString(pbData, cbData, &iData, &szLogPath);
-    ExitOnFailure(hr, "Failed getting MSI transaction log path");
-
-    hr = WiuEndTransaction(MSITRANSACTIONSTATE_COMMIT, WIU_LOG_DEFAULT | INSTALLLOGMODE_VERBOSE, szLogPath);
+    hr = MsiEngineCommitTransaction(&pContext->hMsiTrns, &pContext->hMsiTrnsEvent, NULL);
     ExitOnFailure(hr, "Failed committing an MSI transaction");
 
-    if (pContext->hMsiTrns)
-    {
-        ::MsiCloseHandle(pContext->hMsiTrns);
-        pContext->hMsiTrns = NULL;
-    }
-
-    if (pContext->hMsiTrnsEvent && (pContext->hMsiTrnsEvent != INVALID_HANDLE_VALUE))
-    {
-        ::CloseHandle(pContext->hMsiTrnsEvent);
-        pContext->hMsiTrnsEvent = NULL;
-    }
-
 LExit:
-    ReleaseStr(szLogPath);
 
     return hr;
 }
 
 static HRESULT OnMsiRollbackTransaction(
     __in BURN_ELEVATION_CHILD_MESSAGE_CONTEXT* pContext,
-    __in BYTE* pbData,
-    __in DWORD cbData
+    __in BYTE* /*pbData*/,
+    __in DWORD /*cbData*/
     )
 {
     HRESULT hr = S_OK;
-    SIZE_T iData = 0;
-    LPWSTR szLogPath = NULL;
 
-    // Deserialize message data.
-    hr = BuffReadString(pbData, cbData, &iData, &szLogPath);
-    ExitOnFailure(hr, "Failed getting MSI transaction log path");
-
-    hr = WiuEndTransaction(MSITRANSACTIONSTATE_ROLLBACK, WIU_LOG_DEFAULT | INSTALLLOGMODE_VERBOSE, szLogPath);
+    hr = MsiEngineRollbackTransaction(&pContext->hMsiTrns, &pContext->hMsiTrnsEvent, NULL);
     ExitOnFailure(hr, "Failed rolling back an MSI transaction");
 
-    if (pContext->hMsiTrns)
-    {
-        ::MsiCloseHandle(pContext->hMsiTrns);
-        pContext->hMsiTrns = NULL;
-    }
-
-    if (pContext->hMsiTrnsEvent && (pContext->hMsiTrnsEvent != INVALID_HANDLE_VALUE))
-    {
-        ::CloseHandle(pContext->hMsiTrnsEvent);
-        pContext->hMsiTrnsEvent = NULL;
-    }
-
 LExit:
-    ReleaseStr(szLogPath);
 
     return hr;
 }

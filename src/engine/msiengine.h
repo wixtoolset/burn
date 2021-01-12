@@ -7,6 +7,7 @@
 #define BURNMSIREPAIR_PROPERTY_NAME L"BURNMSIREPAIR"
 #define BURNMSIUNINSTALL_PROPERTY_NAME L"BURNMSIUNINSTALL"
 
+#define E_ROLLBACK_DISABLED HRESULT_FROM_WIN32(ERROR_ROLLBACK_DISABLED)
 
 #if defined(__cplusplus)
 extern "C" {
@@ -52,6 +53,22 @@ HRESULT MsiEnginePlanAddPackage(
     __in BURN_VARIABLES* pVariables,
     __in_opt HANDLE hCacheEvent,
     __in BOOL fPlanPackageCacheRollback
+    );
+HRESULT MsiEngineBeginTransaction(
+    __in LPCWSTR wzName,
+    __out MSIHANDLE *phTransactionHandle,
+    __out HANDLE *phChangeOfOwnerEvent,
+    __in_z LPCWSTR szLogPath
+    );
+HRESULT MsiEngineCommitTransaction(
+    __inout MSIHANDLE *phTransactionHandle,
+    __inout HANDLE *phChangeOfOwnerEvent,
+    __in_z LPCWSTR szLogPath
+    );
+HRESULT MsiEngineRollbackTransaction(
+    __inout MSIHANDLE *phTransactionHandle,
+    __inout HANDLE *phChangeOfOwnerEvent,
+    __in_z LPCWSTR szLogPath
     );
 HRESULT MsiEngineExecutePackage(
     __in_opt HWND hwndParent,
