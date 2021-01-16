@@ -736,7 +736,7 @@ extern "C" HRESULT ApplyExecute(
     __in BURN_ENGINE_STATE* pEngineState,
     __in_opt HANDLE hCacheThread,
     __inout DWORD* pcOverallProgressTicks,
-    __out BOOL* pfKeepRegistration,
+    __inout BOOL* pfKeepRegistration,
     __out BOOL* pfRollback,
     __out BOOL* pfSuspend,
     __out BOOTSTRAPPER_APPLY_RESTART* pRestart
@@ -753,7 +753,6 @@ extern "C" HRESULT ApplyExecute(
     context.cExecutePackagesTotal = pEngineState->plan.cExecutePackagesTotal;
     context.pcOverallProgressTicks = pcOverallProgressTicks;
 
-    *pfKeepRegistration = FALSE;
     *pfRollback = FALSE;
     *pfSuspend = FALSE;
 

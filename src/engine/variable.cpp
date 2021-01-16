@@ -1104,13 +1104,17 @@ static HRESULT FormatString(
     LPWSTR* rgVariables = NULL;
     DWORD cVariables = 0;
     DWORD cch = 0;
+    size_t cchIn = 0;
     BOOL fHidden = FALSE;
     MSIHANDLE hRecord = NULL;
 
     ::EnterCriticalSection(&pVariables->csAccess);
 
     // allocate buffer for format string
-    hr = StrAlloc(&sczFormat, lstrlenW(wzIn) + 1);
+    hr = ::StringCchLengthW(wzIn, STRSAFE_MAX_CCH - 1, &cchIn);
+    ExitOnFailure(hr, "Failed to length of format string.");
+
+    hr = StrAlloc(&sczFormat, cchIn + 1);
     ExitOnFailure(hr, "Failed to allocate buffer for format string.");
 
     // read out variables from the unformatted string and build a format string
