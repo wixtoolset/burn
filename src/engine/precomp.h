@@ -4,7 +4,6 @@
 
 #include <windows.h>
 #include <aclapi.h>
-#include <Bits.h>
 
 #include <math.h>
 #include <msiquery.h>
@@ -95,7 +94,6 @@
 #include "manifest.h"
 #include "splashscreen.h"
 #include "uithread.h"
-#include "bitsengine.h"
 #include "netfxchainer.h"
 
 #include "externalengine.h"
