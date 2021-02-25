@@ -42,7 +42,7 @@ static HRESULT ConcatFeatureActionProperties(
     );
 static HRESULT ConcatPatchProperty(
     __in BURN_PACKAGE* pPackage,
-    __in_opt BOOTSTRAPPER_ACTION_STATE* rgSlipstreamPatchActions,
+    __in BOOL fRollback,
     __inout_z LPWSTR* psczArguments
     );
 static void RegisterSourceDirectory(
@@ -213,8 +213,8 @@ extern "C" HRESULT MsiEngineParsePackageFromXml(
 
     if (cNodes)
     {
-        pPackage->Msi.rgpSlipstreamMspPackages = reinterpret_cast<BURN_PACKAGE**>(MemAlloc(sizeof(BURN_PACKAGE*) * cNodes, TRUE));
-        ExitOnNull(pPackage->Msi.rgpSlipstreamMspPackages, hr, E_OUTOFMEMORY, "Failed to allocate memory for slipstream MSP packages.");
+        pPackage->Msi.rgSlipstreamMsps = reinterpret_cast<BURN_SLIPSTREAM_MSP*>(MemAlloc(sizeof(BURN_SLIPSTREAM_MSP) * cNodes, TRUE));
+        ExitOnNull(pPackage->Msi.rgSlipstreamMsps, hr, E_OUTOFMEMORY, "Failed to allocate memory for slipstream MSP packages.");
 
         pPackage->Msi.rgsczSlipstreamMspPackageIds = reinterpret_cast<LPWSTR*>(MemAlloc(sizeof(LPWSTR*) * cNodes, TRUE));
         ExitOnNull(pPackage->Msi.rgsczSlipstreamMspPackageIds, hr, E_OUTOFMEMORY, "Failed to allocate memory for slipstream MSP ids.");
@@ -383,13 +383,50 @@ extern "C" void MsiEnginePackageUninitialize(
         MemFree(pPackage->Msi.rgsczSlipstreamMspPackageIds);
     }
 
-    if (pPackage->Msi.rgpSlipstreamMspPackages)
+    if (pPackage->Msi.rgSlipstreamMsps)
     {
-        MemFree(pPackage->Msi.rgpSlipstreamMspPackages);
+        MemFree(pPackage->Msi.rgSlipstreamMsps);
+    }
+
+    if (pPackage->Msi.rgChainedPatches)
+    {
+        MemFree(pPackage->Msi.rgChainedPatches);
     }
 
     // clear struct
     memset(&pPackage->Msi, 0, sizeof(pPackage->Msi));
+}
+
+extern "C" HRESULT MsiEngineDetectInitialize(
+    __in BURN_PACKAGES* pPackages
+    )
+{
+    AssertSz(pPackages->cPatchInfo, "MsiEngineDetectInitialize() should only be called if there are MSP packages.");
+
+    HRESULT hr = S_OK;
+
+    // Add target products for slipstream MSIs that weren't detected.
+    for (DWORD iPackage = 0; iPackage < pPackages->cPackages; ++iPackage)
+    {
+        BURN_PACKAGE* pMsiPackage = pPackages->rgPackages + iPackage;
+        if (BURN_PACKAGE_TYPE_MSI == pMsiPackage->type)
+        {
+            for (DWORD j = 0; j < pMsiPackage->Msi.cSlipstreamMspPackages; ++j)
+            {
+                BURN_SLIPSTREAM_MSP* pSlipstreamMsp = pMsiPackage->Msi.rgSlipstreamMsps + j;
+                Assert(pSlipstreamMsp->pMspPackage && BURN_PACKAGE_TYPE_MSP == pSlipstreamMsp->pMspPackage->type);
+
+                if (pSlipstreamMsp->pMspPackage && BURN_PACKAGE_INVALID_PATCH_INDEX == pSlipstreamMsp->dwMsiChainedPatchIndex)
+                {
+                    hr = MspEngineAddMissingSlipstreamTarget(pMsiPackage, pSlipstreamMsp);
+                    ExitOnFailure(hr, "Failed to add slipstreamed target product code to package: %ls", pSlipstreamMsp->pMspPackage->sczId);
+                }
+            }
+        }
+    }
+
+LExit:
+    return hr;
 }
 
 extern "C" HRESULT MsiEngineDetectPackage(
@@ -674,15 +711,47 @@ LExit:
     return hr;
 }
 
+extern "C" HRESULT MsiEnginePlanInitializePackage(
+    __in BURN_PACKAGE* pPackage,
+    __in BURN_VARIABLES* pVariables,
+    __in BURN_USER_EXPERIENCE* pUserExperience
+    )
+{
+    HRESULT hr = S_OK;
+
+    if (pPackage->Msi.cFeatures)
+    {
+        // get feature request states
+        for (DWORD i = 0; i < pPackage->Msi.cFeatures; ++i)
+        {
+            BURN_MSIFEATURE* pFeature = &pPackage->Msi.rgFeatures[i];
+
+            // Evaluate feature conditions.
+            hr = EvaluateActionStateConditions(pVariables, pFeature->sczAddLocalCondition, pFeature->sczAddSourceCondition, pFeature->sczAdvertiseCondition, &pFeature->defaultRequested);
+            ExitOnFailure(hr, "Failed to evaluate requested state conditions.");
+
+            hr = EvaluateActionStateConditions(pVariables, pFeature->sczRollbackAddLocalCondition, pFeature->sczRollbackAddSourceCondition, pFeature->sczRollbackAdvertiseCondition, &pFeature->expectedState);
+            ExitOnFailure(hr, "Failed to evaluate expected state conditions.");
+
+            // Remember the default feature requested state so the engine doesn't get blamed for planning the wrong thing if the BA changes it.
+            pFeature->requested = pFeature->defaultRequested;
+
+            // Send plan MSI feature message to BA.
+            hr = UserExperienceOnPlanMsiFeature(pUserExperience, pPackage->sczId, pFeature->sczId, &pFeature->requested);
+            ExitOnRootFailure(hr, "BA aborted plan MSI feature.");
+        }
+    }
+
+LExit:
+    return hr;
+}
+
 //
 // PlanCalculate - calculates the execute and rollback state for the requested package state.
 //
 extern "C" HRESULT MsiEnginePlanCalculatePackage(
     __in BURN_PACKAGE* pPackage,
-    __in BURN_VARIABLES* pVariables,
-    __in BURN_USER_EXPERIENCE* pUserExperience,
-    __in BOOL fInsideMsiTransaction,
-    __out_opt BOOL* pfBARequestedCache
+    __in BOOL fInsideMsiTransaction
     )
 {
     Trace(REPORT_STANDARD, "Planning MSI package 0x%p", pPackage);
@@ -695,45 +764,23 @@ extern "C" HRESULT MsiEnginePlanCalculatePackage(
     BOOTSTRAPPER_ACTION_STATE rollback = BOOTSTRAPPER_ACTION_STATE_NONE;
     BOOL fFeatureActionDelta = FALSE;
     BOOL fRollbackFeatureActionDelta = FALSE;
-    BOOL fBARequestedCache = FALSE;
 
     if (pPackage->Msi.cFeatures)
     {
         // If the package is present and we're repairing it.
         BOOL fRepairingPackage = (BOOTSTRAPPER_PACKAGE_STATE_CACHED < pPackage->currentState && BOOTSTRAPPER_REQUEST_STATE_REPAIR == pPackage->requested);
 
-        LogId(REPORT_STANDARD, MSG_PLAN_MSI_FEATURES, pPackage->Msi.cFeatures, pPackage->sczId);
-
         // plan features
         for (DWORD i = 0; i < pPackage->Msi.cFeatures; ++i)
         {
             BURN_MSIFEATURE* pFeature = &pPackage->Msi.rgFeatures[i];
-            BOOTSTRAPPER_FEATURE_STATE defaultFeatureRequestedState = BOOTSTRAPPER_FEATURE_STATE_UNKNOWN;
-            BOOTSTRAPPER_FEATURE_STATE featureRequestedState = BOOTSTRAPPER_FEATURE_STATE_UNKNOWN;
-            BOOTSTRAPPER_FEATURE_STATE featureExpectedState = BOOTSTRAPPER_FEATURE_STATE_UNKNOWN;
-
-            // Evaluate feature conditions.
-            hr = EvaluateActionStateConditions(pVariables, pFeature->sczAddLocalCondition, pFeature->sczAddSourceCondition, pFeature->sczAdvertiseCondition, &defaultFeatureRequestedState);
-            ExitOnFailure(hr, "Failed to evaluate requested state conditions.");
-
-            hr = EvaluateActionStateConditions(pVariables, pFeature->sczRollbackAddLocalCondition, pFeature->sczRollbackAddSourceCondition, pFeature->sczRollbackAdvertiseCondition, &featureExpectedState);
-            ExitOnFailure(hr, "Failed to evaluate expected state conditions.");
-
-            // Remember the default feature requested state so the engine doesn't get blamed for planning the wrong thing if the BA changes it.
-            featureRequestedState = defaultFeatureRequestedState;
-
-            // Send plan MSI feature message to BA.
-            hr = UserExperienceOnPlanMsiFeature(pUserExperience, pPackage->sczId, pFeature->sczId, &featureRequestedState);
-            ExitOnRootFailure(hr, "BA aborted plan MSI feature.");
 
             // Calculate feature actions.
-            hr = CalculateFeatureAction(pFeature->currentState, featureRequestedState, fRepairingPackage, &pFeature->execute, &fFeatureActionDelta);
+            hr = CalculateFeatureAction(pFeature->currentState, pFeature->requested, fRepairingPackage, &pFeature->execute, &fFeatureActionDelta);
             ExitOnFailure(hr, "Failed to calculate execute feature state.");
 
-            hr = CalculateFeatureAction(featureRequestedState, BOOTSTRAPPER_FEATURE_ACTION_NONE == pFeature->execute ? featureExpectedState : pFeature->currentState, FALSE, &pFeature->rollback, &fRollbackFeatureActionDelta);
+            hr = CalculateFeatureAction(pFeature->requested, BOOTSTRAPPER_FEATURE_ACTION_NONE == pFeature->execute ? pFeature->expectedState : pFeature->currentState, FALSE, &pFeature->rollback, &fRollbackFeatureActionDelta);
             ExitOnFailure(hr, "Failed to calculate rollback feature state.");
-
-            LogId(REPORT_STANDARD, MSG_PLANNED_MSI_FEATURE, pFeature->sczId, LoggingMsiFeatureStateToString(pFeature->currentState), LoggingMsiFeatureStateToString(defaultFeatureRequestedState), LoggingMsiFeatureStateToString(featureRequestedState), LoggingMsiFeatureActionToString(pFeature->execute), LoggingMsiFeatureActionToString(pFeature->rollback));
         }
     }
 
@@ -801,11 +848,6 @@ extern "C" HRESULT MsiEnginePlanCalculatePackage(
             execute = BOOTSTRAPPER_ACTION_STATE_INSTALL;
             break;
 
-        case BOOTSTRAPPER_REQUEST_STATE_CACHE:
-            execute = BOOTSTRAPPER_ACTION_STATE_NONE;
-            fBARequestedCache = TRUE;
-            break;
-
         default:
             execute = BOOTSTRAPPER_ACTION_STATE_NONE;
             break;
@@ -867,11 +909,6 @@ extern "C" HRESULT MsiEnginePlanCalculatePackage(
     // return values
     pPackage->execute = execute;
     pPackage->rollback = rollback;
-
-    if (pfBARequestedCache)
-    {
-        *pfBARequestedCache = fBARequestedCache;
-    }
 
 LExit:
     return hr;
@@ -969,15 +1006,6 @@ extern "C" HRESULT MsiEnginePlanAddPackage(
 
         LoggingSetPackageVariable(pPackage, NULL, FALSE, pLog, pVariables, &pAction->msiPackage.sczLogPath); // ignore errors.
         pAction->msiPackage.dwLoggingAttributes = pLog->dwAttributes;
-    }
-
-    // Update any slipstream patches' state.
-    for (DWORD i = 0; i < pPackage->Msi.cSlipstreamMspPackages; ++i)
-    {
-        BURN_PACKAGE* pMspPackage = pPackage->Msi.rgpSlipstreamMspPackages[i];
-        AssertSz(BURN_PACKAGE_TYPE_MSP == pMspPackage->type, "Only MSP packages can be slipstream patches.");
-
-        MspEngineSlipstreamUpdateState(pMspPackage, pPackage->execute, pPackage->rollback);
     }
 
 LExit:
@@ -1152,10 +1180,10 @@ extern "C" HRESULT MsiEngineExecutePackage(
     ExitOnFailure(hr, "Failed to add feature action properties to obfuscated argument string.");
 
     // add slipstream patch properties
-    hr = ConcatPatchProperty(pExecuteAction->msiPackage.pPackage, pExecuteAction->msiPackage.rgSlipstreamPatches, &sczProperties);
+    hr = ConcatPatchProperty(pExecuteAction->msiPackage.pPackage, fRollback, &sczProperties);
     ExitOnFailure(hr, "Failed to add patch properties to argument string.");
 
-    hr = ConcatPatchProperty(pExecuteAction->msiPackage.pPackage, pExecuteAction->msiPackage.rgSlipstreamPatches, &sczObfuscatedProperties);
+    hr = ConcatPatchProperty(pExecuteAction->msiPackage.pPackage, fRollback, &sczObfuscatedProperties);
     ExitOnFailure(hr, "Failed to add patch properties to obfuscated argument string.");
 
     hr = MsiEngineConcatActionProperty(pExecuteAction->msiPackage.actionMsiProperty, &sczProperties);
@@ -1404,6 +1432,7 @@ extern "C" HRESULT MsiEngineCalculateInstallUiLevel(
 
 extern "C" void MsiEngineUpdateInstallRegistrationState(
     __in BURN_EXECUTE_ACTION* pAction,
+    __in BOOL fRollback,
     __in HRESULT hrExecute,
     __in BOOL fInsideMsiTransaction
     )
@@ -1432,6 +1461,49 @@ extern "C" void MsiEngineUpdateInstallRegistrationState(
     else
     {
         pPackage->installRegistrationState = newState;
+    }
+
+    if (BURN_PACKAGE_REGISTRATION_STATE_ABSENT == newState)
+    {
+        for (DWORD i = 0; i < pPackage->Msi.cChainedPatches; ++i)
+        {
+            BURN_CHAINED_PATCH* pChainedPatch = pPackage->Msi.rgChainedPatches + i;
+            BURN_MSPTARGETPRODUCT* pTargetProduct = pChainedPatch->pMspPackage->Msp.rgTargetProducts + pChainedPatch->dwMspTargetProductIndex;
+
+            if (fInsideMsiTransaction)
+            {
+                pTargetProduct->transactionRegistrationState = newState;
+            }
+            else
+            {
+                pTargetProduct->registrationState = newState;
+            }
+        }
+    }
+    else
+    {
+        for (DWORD i = 0; i < pPackage->Msi.cSlipstreamMspPackages; ++i)
+        {
+            BURN_SLIPSTREAM_MSP* pSlipstreamMsp = pPackage->Msi.rgSlipstreamMsps + i;
+            BOOTSTRAPPER_ACTION_STATE patchExecuteAction = fRollback ? pSlipstreamMsp->rollback : pSlipstreamMsp->execute;
+
+            if (BOOTSTRAPPER_ACTION_STATE_INSTALL > patchExecuteAction)
+            {
+                continue;
+            }
+
+            BURN_CHAINED_PATCH* pChainedPatch = pPackage->Msi.rgChainedPatches + pSlipstreamMsp->dwMsiChainedPatchIndex;
+            BURN_MSPTARGETPRODUCT* pTargetProduct = pChainedPatch->pMspPackage->Msp.rgTargetProducts + pChainedPatch->dwMspTargetProductIndex;
+
+            if (fInsideMsiTransaction)
+            {
+                pTargetProduct->transactionRegistrationState = newState;
+            }
+            else
+            {
+                pTargetProduct->registrationState = newState;
+            }
+        }
     }
 
 LExit:
@@ -1883,7 +1955,7 @@ LExit:
 
 static HRESULT ConcatPatchProperty(
     __in BURN_PACKAGE* pPackage,
-    __in_opt BOOTSTRAPPER_ACTION_STATE* rgSlipstreamPatchActions,
+    __in BOOL fRollback,
     __inout_z LPWSTR* psczArguments
     )
 {
@@ -1893,14 +1965,14 @@ static HRESULT ConcatPatchProperty(
     LPWSTR sczPatches = NULL;
 
     // If there are slipstream patch actions, build up their patch action.
-    if (rgSlipstreamPatchActions)
+    if (pPackage->Msi.cSlipstreamMspPackages)
     {
         for (DWORD i = 0; i < pPackage->Msi.cSlipstreamMspPackages; ++i)
         {
-            BURN_PACKAGE* pMspPackage = pPackage->Msi.rgpSlipstreamMspPackages[i];
-            AssertSz(BURN_PACKAGE_TYPE_MSP == pMspPackage->type, "Only MSP packages can be slipstream patches.");
+            BURN_SLIPSTREAM_MSP* pSlipstreamMsp = pPackage->Msi.rgSlipstreamMsps + i;
+            BURN_PACKAGE* pMspPackage = pSlipstreamMsp->pMspPackage;
+            BOOTSTRAPPER_ACTION_STATE patchExecuteAction = fRollback ? pSlipstreamMsp->rollback : pSlipstreamMsp->execute;
 
-            BOOTSTRAPPER_ACTION_STATE patchExecuteAction = rgSlipstreamPatchActions[i];
             if (BOOTSTRAPPER_ACTION_STATE_UNINSTALL < patchExecuteAction)
             {
                 hr = CacheGetCompletedPath(pMspPackage->fPerMachine, pMspPackage->sczCacheId, &sczCachedDirectory);

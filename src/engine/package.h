@@ -14,6 +14,8 @@ typedef _BURN_PACKAGE BURN_PACKAGE;
 
 // constants
 
+const DWORD BURN_PACKAGE_INVALID_PATCH_INDEX = 0x80000000;
+
 enum BURN_EXE_EXIT_CODE_TYPE
 {
     BURN_EXE_EXIT_CODE_TYPE_NONE,
@@ -81,9 +83,16 @@ enum BOOTSTRAPPER_FEATURE_ACTION
 enum BURN_PACKAGE_REGISTRATION_STATE
 {
     BURN_PACKAGE_REGISTRATION_STATE_UNKNOWN,
-    BURN_PACKAGE_REGISTRATION_STATE_IGNORED,
     BURN_PACKAGE_REGISTRATION_STATE_ABSENT,
+    BURN_PACKAGE_REGISTRATION_STATE_IGNORED,
     BURN_PACKAGE_REGISTRATION_STATE_PRESENT,
+};
+
+enum BURN_PATCH_SKIP_STATE
+{
+    BURN_PATCH_SKIP_STATE_NONE,
+    BURN_PATCH_SKIP_STATE_TARGET_UNINSTALL,
+    BURN_PATCH_SKIP_STATE_SLIPSTREAM,
 };
 
 // structs
@@ -109,11 +118,17 @@ typedef struct _BURN_MSPTARGETPRODUCT
     DWORD dwOrder;
     WCHAR wzTargetProductCode[39];
     BURN_PACKAGE* pChainedTargetPackage;
+    BOOL fInstalled;
     BOOL fSlipstream;
+    BOOL fSlipstreamRequired; // this means the target product is not present on the machine, but is available in the chain as a slipstream target.
 
     BOOTSTRAPPER_PACKAGE_STATE patchPackageState; // only valid after Detect.
+    BOOTSTRAPPER_REQUEST_STATE defaultRequested;  // only valid during Plan.
+    BOOTSTRAPPER_REQUEST_STATE requested;         // only valid during Plan.
     BOOTSTRAPPER_ACTION_STATE execute;            // only valid during Plan.
     BOOTSTRAPPER_ACTION_STATE rollback;           // only valid during Plan.
+    BURN_PATCH_SKIP_STATE executeSkip;            // only valid during Plan.
+    BURN_PATCH_SKIP_STATE rollbackSkip;           // only valid during Plan.
 
     BURN_PACKAGE_REGISTRATION_STATE registrationState;           // initialized during Detect, updated during Apply.
     BURN_PACKAGE_REGISTRATION_STATE transactionRegistrationState;// only valid during Apply inside an MSI transaction.
@@ -137,9 +152,12 @@ typedef struct _BURN_MSIFEATURE
     LPWSTR sczRollbackAddSourceCondition;
     LPWSTR sczRollbackAdvertiseCondition;
 
-    BOOTSTRAPPER_FEATURE_STATE currentState;   // only valid after Detect.
-    BOOTSTRAPPER_FEATURE_ACTION execute;       // only valid during Plan.
-    BOOTSTRAPPER_FEATURE_ACTION rollback;      // only valid during Plan.
+    BOOTSTRAPPER_FEATURE_STATE currentState;       // only valid after Detect.
+    BOOTSTRAPPER_FEATURE_STATE expectedState;      // only valid during Plan.
+    BOOTSTRAPPER_FEATURE_STATE defaultRequested;   // only valid during Plan.
+    BOOTSTRAPPER_FEATURE_STATE requested;          // only valid during Plan.
+    BOOTSTRAPPER_FEATURE_ACTION execute;           // only valid during Plan.
+    BOOTSTRAPPER_FEATURE_ACTION rollback;          // only valid during Plan.
 } BURN_MSIFEATURE;
 
 typedef struct _BURN_RELATED_MSI
@@ -157,6 +175,21 @@ typedef struct _BURN_RELATED_MSI
     DWORD* rgdwLanguages;
     DWORD cLanguages;
 } BURN_RELATED_MSI;
+
+typedef struct _BURN_CHAINED_PATCH
+{
+    BURN_PACKAGE* pMspPackage;
+    DWORD dwMspTargetProductIndex; // index into the Msp.rgTargetProducts
+} BURN_CHAINED_PATCH;
+
+typedef struct _BURN_SLIPSTREAM_MSP
+{
+    BURN_PACKAGE* pMspPackage;
+    DWORD dwMsiChainedPatchIndex; // index into the Msi.rgChainedPatches
+
+    BOOTSTRAPPER_ACTION_STATE execute;    // only valid during Plan.
+    BOOTSTRAPPER_ACTION_STATE rollback;   // only valid during Plan.
+} BURN_SLIPSTREAM_MSP;
 
 typedef struct _BURN_PACKAGE_PAYLOAD
 {
@@ -197,7 +230,6 @@ typedef struct _BURN_PACKAGE
     LPWSTR sczRollbackLogPathVariable;  // name of the variable that will be set to the rollback path.
 
     LPWSTR sczInstallCondition;
-    LPWSTR sczRollbackInstallCondition;
     BOOL fPerMachine;
     BOOL fUninstallable;
     BOOL fVital;
@@ -250,7 +282,7 @@ typedef struct _BURN_PACKAGE
             LPWSTR sczRepairArguments;
             LPWSTR sczUninstallArguments;
             LPWSTR sczIgnoreDependencies;
-            LPWSTR sczAncestors;
+            LPCWSTR wzAncestors; // points directly into engine state.
 
             BOOL fPseudoBundle;
 
@@ -282,9 +314,12 @@ typedef struct _BURN_PACKAGE
             BURN_RELATED_MSI* rgRelatedMsis;
             DWORD cRelatedMsis;
 
-            _BURN_PACKAGE** rgpSlipstreamMspPackages;
+            BURN_SLIPSTREAM_MSP* rgSlipstreamMsps;
             LPWSTR* rgsczSlipstreamMspPackageIds;
             DWORD cSlipstreamMspPackages;
+
+            BURN_CHAINED_PATCH* rgChainedPatches;
+            DWORD cChainedPatches;
         } Msi;
         struct
         {

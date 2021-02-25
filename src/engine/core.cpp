@@ -104,9 +104,9 @@ extern "C" HRESULT CoreInitialize(
     ExitOnFailure(hr, "Failed to parse command line.");
 
     LogId(REPORT_STANDARD, MSG_BURN_COMMAND_LINE, sczSanitizedCommandLine ? sczSanitizedCommandLine : L"");
-
-    hr = DependencyInitialize(&pEngineState->registration, pEngineState->sczIgnoreDependencies);
-    ExitOnFailure(hr, "Failed to initialize dependency data.");
+    
+    hr = CoreInitializeConstants(pEngineState);
+    ExitOnFailure(hr, "Failed to initialize contants.");
 
     // Retain whether bundle was initially run elevated.
     ProcElevated(::GetCurrentProcess(), &fElevated);
@@ -170,6 +170,43 @@ LExit:
     ReleaseStr(sczSanitizedCommandLine);
     ReleaseMem(pbBuffer);
 
+    return hr;
+}
+
+extern "C" HRESULT CoreInitializeConstants(
+    __in BURN_ENGINE_STATE* pEngineState
+    )
+{
+    HRESULT hr = S_OK;
+    BURN_REGISTRATION* pRegistration = &pEngineState->registration;
+
+    hr = DependencyInitialize(pRegistration, pEngineState->sczIgnoreDependencies);
+    ExitOnFailure(hr, "Failed to initialize dependency data.");
+
+    // Support passing Ancestors to embedded burn bundles.
+    if (pRegistration->sczAncestors && *pRegistration->sczAncestors)
+    {
+        hr = StrAllocFormatted(&pRegistration->sczBundlePackageAncestors, L"%ls;%ls", pRegistration->sczAncestors, pRegistration->sczId);
+        ExitOnFailure(hr, "Failed to copy ancestors and self to bundle package ancestors.");
+    }
+    else
+    {
+        hr = StrAllocString(&pRegistration->sczBundlePackageAncestors, pRegistration->sczId, 0);
+        ExitOnFailure(hr, "Failed to copy self to bundle package ancestors.");
+    }
+    
+    for (DWORD i = 0; i < pEngineState->packages.cPackages; ++i)
+    {
+        BURN_PACKAGE* pPackage = pEngineState->packages.rgPackages + i;
+        
+        if (BURN_PACKAGE_TYPE_EXE == pPackage->type && BURN_EXE_PROTOCOL_TYPE_BURN == pPackage->Exe.protocol) // TODO: Don't assume exePackages with burn protocol are bundles.
+        {
+            // Pass along any ancestors and ourself to prevent infinite loops.
+            pPackage->Exe.wzAncestors = pRegistration->sczBundlePackageAncestors;
+        }
+    }
+
+LExit:
     return hr;
 }
 
@@ -314,6 +351,9 @@ extern "C" HRESULT CoreDetect(
     {
         hr = MspEngineDetectInitialize(&pEngineState->packages);
         ExitOnFailure(hr, "Failed to initialize MSP engine detection.");
+
+        hr = MsiEngineDetectInitialize(&pEngineState->packages);
+        ExitOnFailure(hr, "Failed to initialize MSI engine detection.");
     }
 
     for (DWORD i = 0; i < pEngineState->packages.cPackages; ++i)
@@ -453,7 +493,7 @@ extern "C" HRESULT CorePlan(
         ExitOnFailure(hr, "Failed to plan the layout of the bundle.");
 
         // Plan the packages' layout.
-        hr = PlanPackages(&pEngineState->registration, &pEngineState->userExperience, &pEngineState->packages, &pEngineState->plan, &pEngineState->log, &pEngineState->variables, FALSE, pEngineState->command.display, pEngineState->command.relationType, sczLayoutDirectory, &hSyncpointEvent);
+        hr = PlanPackages(&pEngineState->userExperience, &pEngineState->packages, &pEngineState->plan, &pEngineState->log, &pEngineState->variables, pEngineState->command.display, pEngineState->command.relationType, sczLayoutDirectory, &hSyncpointEvent);
         ExitOnFailure(hr, "Failed to plan packages.");
     }
     else if (BOOTSTRAPPER_ACTION_UPDATE_REPLACE == action || BOOTSTRAPPER_ACTION_UPDATE_REPLACE_EMBEDDED == action)
@@ -492,7 +532,7 @@ extern "C" HRESULT CorePlan(
             hr = PlanRelatedBundlesBegin(&pEngineState->userExperience, &pEngineState->registration, pEngineState->command.relationType, &pEngineState->plan);
             ExitOnFailure(hr, "Failed to plan related bundles.");
 
-            hr = PlanPackages(&pEngineState->registration, &pEngineState->userExperience, &pEngineState->packages, &pEngineState->plan, &pEngineState->log, &pEngineState->variables, pEngineState->registration.fInstalled, pEngineState->command.display, pEngineState->command.relationType, NULL, &hSyncpointEvent);
+            hr = PlanPackages(&pEngineState->userExperience, &pEngineState->packages, &pEngineState->plan, &pEngineState->log, &pEngineState->variables, pEngineState->command.display, pEngineState->command.relationType, NULL, &hSyncpointEvent);
             ExitOnFailure(hr, "Failed to plan packages.");
 
             // Schedule the update of related bundles last.
@@ -500,10 +540,6 @@ extern "C" HRESULT CorePlan(
             ExitOnFailure(hr, "Failed to schedule related bundles.");
         }
     }
-
-    // Remove unnecessary actions.
-    hr = PlanFinalizeActions(&pEngineState->plan);
-    ExitOnFailure(hr, "Failed to remove unnecessary actions from plan.");
 
     if (fContinuePlanning)
     {
@@ -1777,6 +1813,44 @@ static void LogPackages(
             const BURN_PACKAGE* pPackage = &pPackages->rgPackages[iPackage];
 
             LogId(REPORT_STANDARD, MSG_PLANNED_PACKAGE, pPackage->sczId, LoggingPackageStateToString(pPackage->currentState), LoggingRequestStateToString(pPackage->defaultRequested), LoggingRequestStateToString(pPackage->requested), LoggingActionStateToString(pPackage->execute), LoggingActionStateToString(pPackage->rollback), LoggingBoolToString(pPackage->fAcquire), LoggingBoolToString(pPackage->fUncache), LoggingDependencyActionToString(pPackage->dependencyExecute), LoggingPackageRegistrationStateToString(pPackage->fCanAffectRegistration, pPackage->expectedInstallRegistrationState), LoggingPackageRegistrationStateToString(pPackage->fCanAffectRegistration, pPackage->expectedCacheRegistrationState));
+            
+            if (BURN_PACKAGE_TYPE_MSI == pPackage->type)
+            {
+                if (pPackage->Msi.cFeatures)
+                {
+                    LogId(REPORT_STANDARD, MSG_PLANNED_MSI_FEATURES, pPackage->Msi.cFeatures, pPackage->sczId);
+
+                    for (DWORD j = 0; j < pPackage->Msi.cFeatures; ++j)
+                    {
+                        const BURN_MSIFEATURE* pFeature = &pPackage->Msi.rgFeatures[j];
+
+                        LogId(REPORT_STANDARD, MSG_PLANNED_MSI_FEATURE, pFeature->sczId, LoggingMsiFeatureStateToString(pFeature->currentState), LoggingMsiFeatureStateToString(pFeature->defaultRequested), LoggingMsiFeatureStateToString(pFeature->requested), LoggingMsiFeatureActionToString(pFeature->execute), LoggingMsiFeatureActionToString(pFeature->rollback));
+                    }
+                }
+
+                if (pPackage->Msi.cSlipstreamMspPackages)
+                {
+                    LogId(REPORT_STANDARD, MSG_PLANNED_SLIPSTREAMED_MSP_TARGETS, pPackage->Msi.cSlipstreamMspPackages, pPackage->sczId);
+
+                    for (DWORD j = 0; j < pPackage->Msi.cSlipstreamMspPackages; ++j)
+                    {
+                        const BURN_SLIPSTREAM_MSP* pSlipstreamMsp = &pPackage->Msi.rgSlipstreamMsps[j];
+
+                        LogId(REPORT_STANDARD, MSG_PLANNED_SLIPSTREAMED_MSP_TARGET, pSlipstreamMsp->pMspPackage->sczId, LoggingActionStateToString(pSlipstreamMsp->execute), LoggingActionStateToString(pSlipstreamMsp->rollback));
+                    }
+                }
+            }
+            else if (BURN_PACKAGE_TYPE_MSP == pPackage->type && pPackage->Msp.cTargetProductCodes)
+            {
+                LogId(REPORT_STANDARD, MSG_PLANNED_MSP_TARGETS, pPackage->Msp.cTargetProductCodes, pPackage->sczId);
+
+                for (DWORD j = 0; j < pPackage->Msp.cTargetProductCodes; ++j)
+                {
+                    const BURN_MSPTARGETPRODUCT* pTargetProduct = &pPackage->Msp.rgTargetProducts[j];
+
+                    LogId(REPORT_STANDARD, MSG_PLANNED_MSP_TARGET, pTargetProduct->wzTargetProductCode, LoggingPackageStateToString(pTargetProduct->patchPackageState), LoggingRequestStateToString(pTargetProduct->defaultRequested), LoggingRequestStateToString(pTargetProduct->requested), LoggingMspTargetActionToString(pTargetProduct->execute, pTargetProduct->executeSkip), LoggingMspTargetActionToString(pTargetProduct->rollback, pTargetProduct->rollbackSkip));
+                }
+            }
         }
 
         // Display related bundles last if caching, installing, modifying, or repairing.

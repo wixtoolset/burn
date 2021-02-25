@@ -28,15 +28,28 @@ void MspEnginePackageUninitialize(
 HRESULT MspEngineDetectInitialize(
     __in BURN_PACKAGES* pPackages
     );
+HRESULT MspEngineAddDetectedTargetProduct(
+    __in BURN_PACKAGES* pPackages,
+    __in BURN_PACKAGE* pPackage,
+    __in DWORD dwOrder,
+    __in_z LPCWSTR wzProductCode,
+    __in MSIINSTALLCONTEXT context
+    );
+HRESULT MspEngineAddMissingSlipstreamTarget(
+    __in BURN_PACKAGE* pMsiPackage,
+    __in BURN_SLIPSTREAM_MSP* pSlipstreamMsp
+    );
 HRESULT MspEngineDetectPackage(
+    __in BURN_PACKAGE* pPackage,
+    __in BURN_USER_EXPERIENCE* pUserExperience
+    );
+HRESULT MspEnginePlanInitializePackage(
     __in BURN_PACKAGE* pPackage,
     __in BURN_USER_EXPERIENCE* pUserExperience
     );
 HRESULT MspEnginePlanCalculatePackage(
     __in BURN_PACKAGE* pPackage,
-    __in BURN_USER_EXPERIENCE* pUserExperience,
-    __in BOOL fInsideMsiTransaction,
-    __out_opt BOOL* pfBARequestedCache
+    __in BOOL fInsideMsiTransaction
     );
 HRESULT MspEnginePlanAddPackage(
     __in BOOTSTRAPPER_DISPLAY display,
@@ -56,11 +69,6 @@ HRESULT MspEngineExecutePackage(
     __in PFN_MSIEXECUTEMESSAGEHANDLER pfnMessageHandler,
     __in LPVOID pvContext,
     __out BOOTSTRAPPER_APPLY_RESTART* pRestart
-    );
-void MspEngineSlipstreamUpdateState(
-    __in BURN_PACKAGE* pMspPackage,
-    __in BOOTSTRAPPER_ACTION_STATE execute,
-    __in BOOTSTRAPPER_ACTION_STATE rollback
     );
 void MspEngineUpdateInstallRegistrationState(
     __in BURN_EXECUTE_ACTION* pAction,

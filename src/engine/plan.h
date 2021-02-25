@@ -208,8 +208,9 @@ typedef struct _BURN_CACHE_ACTION
 
 typedef struct _BURN_ORDERED_PATCHES
 {
-    DWORD dwOrder;
     BURN_PACKAGE* pPackage;
+
+    BURN_MSPTARGETPRODUCT* pTargetProduct; // only valid in the unelevated engine.
 } BURN_ORDERED_PATCHES;
 
 typedef struct _BURN_EXECUTE_ACTION_CHECKPOINT
@@ -252,10 +253,6 @@ typedef struct _BURN_EXECUTE_ACTION
             BOOTSTRAPPER_ACTION_STATE action;
 
             BOOTSTRAPPER_FEATURE_ACTION* rgFeatures;
-            BOOTSTRAPPER_ACTION_STATE* rgSlipstreamPatches;
-
-            BURN_ORDERED_PATCHES* rgOrderedPatches;
-            DWORD cPatches;
         } msiPackage;
         struct
         {
@@ -382,8 +379,7 @@ HRESULT PlanDefaultPackageRequestState(
     __in BOOL fPermanent,
     __in BURN_CACHE_TYPE cacheType,
     __in BOOTSTRAPPER_ACTION action,
-    __in BURN_VARIABLES* pVariables,
-    __in_z_opt LPCWSTR wzInstallCondition,
+    __in BOOL fInstallCondition,
     __in BOOTSTRAPPER_RELATION_TYPE relationType,
     __out BOOTSTRAPPER_REQUEST_STATE* pRequestState
     );
@@ -396,13 +392,11 @@ HRESULT PlanLayoutBundle(
     __out_z LPWSTR* psczLayoutDirectory
     );
 HRESULT PlanPackages(
-    __in BURN_REGISTRATION* pRegistration,
     __in BURN_USER_EXPERIENCE* pUX,
     __in BURN_PACKAGES* pPackages,
     __in BURN_PLAN* pPlan,
     __in BURN_LOGGING* pLog,
     __in BURN_VARIABLES* pVariables,
-    __in BOOL fBundleInstalled,
     __in BOOTSTRAPPER_DISPLAY display,
     __in BOOTSTRAPPER_RELATION_TYPE relationType,
     __in_z_opt LPCWSTR wzLayoutDirectory,

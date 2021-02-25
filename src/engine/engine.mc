@@ -321,14 +321,14 @@ MessageId=203
 Severity=Success
 SymbolicName=MSG_PLANNED_MSI_FEATURE
 Language=English
-Planned feature: %1!ls!, state: %2!hs!, default requested: %3!hs!, ba requested: %4!hs!, execute action: %5!hs!, rollback action: %6!hs!
+      Planned feature: %1!ls!, state: %2!hs!, default requested: %3!hs!, ba requested: %4!hs!, execute action: %5!hs!, rollback action: %6!hs!
 .
 
 MessageId=204
 Severity=Success
-SymbolicName=MSG_PLAN_MSI_FEATURES
+SymbolicName=MSG_PLANNED_MSI_FEATURES
 Language=English
-Plan %1!u! msi features for package: %2!ls!
+   Plan %1!u! msi features for package: %2!ls!
 .
 
 MessageId=205
@@ -413,6 +413,34 @@ Severity=Success
 SymbolicName=MSG_PLAN_SKIPPED_DEPENDENT_BUNDLE_REPAIR
 Language=English
 Plan skipped dependent bundle repair: %1!ls!, type: %2!hs!, because no packages are being executed during this uninstall operation.
+.
+
+MessageId=218
+Severity=Success
+SymbolicName=MSG_PLANNED_MSP_TARGETS
+Language=English
+   Plan %1!u! patch targets for package: %2!ls!
+.
+
+MessageId=219
+Severity=Success
+SymbolicName=MSG_PLANNED_MSP_TARGET
+Language=English
+      Planned patch target: %1!ls!, state: %2!hs!, default requested: %3!hs!, ba requested: %4!hs!, execute: %5!hs!, rollback: %6!hs!
+.
+
+MessageId=220
+Severity=Success
+SymbolicName=MSG_PLANNED_SLIPSTREAMED_MSP_TARGETS
+Language=English
+   Plan %1!u! slipstream patches for package: %2!ls!
+.
+
+MessageId=221
+Severity=Success
+SymbolicName=MSG_PLANNED_SLIPSTREAMED_MSP_TARGET
+Language=English
+      Planned slipstreamed patch: %1!ls!, execute: %2!hs!, rollback: %3!hs!
 .
 
 MessageId=299

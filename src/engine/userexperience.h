@@ -237,7 +237,7 @@ BAAPI UserExperienceOnDetectRelatedMsiPackage(
     __in VERUTIL_VERSION* pVersion,
     __in BOOTSTRAPPER_RELATED_OPERATION operation
     );
-BAAPI UserExperienceOnDetectTargetMsiPackage(
+BAAPI UserExperienceOnDetectPatchTarget(
     __in BURN_USER_EXPERIENCE* pUserExperience,
     __in_z LPCWSTR wzPackageId,
     __in_z LPCWSTR wzProductCode,
@@ -372,26 +372,31 @@ BAAPI UserExperienceOnPlanMsiPackage(
     __inout INSTALLUILEVEL* pUiLevel,
     __inout BOOL* pfDisableExternalUiHandler
     );
+BAAPI UserExperienceOnPlannedPackage(
+    __in BURN_USER_EXPERIENCE* pUserExperience,
+    __in_z LPCWSTR wzPackageId,
+    __in BOOTSTRAPPER_ACTION_STATE execute,
+    __in BOOTSTRAPPER_ACTION_STATE rollback
+    );
 BAAPI UserExperienceOnPlanPackageBegin(
     __in BURN_USER_EXPERIENCE* pUserExperience,
     __in_z LPCWSTR wzPackageId,
+    __in BOOTSTRAPPER_PACKAGE_STATE state,
+    __in BOOL fInstallCondition,
     __inout BOOTSTRAPPER_REQUEST_STATE* pRequestedState
     );
 BAAPI UserExperienceOnPlanPackageComplete(
     __in BURN_USER_EXPERIENCE* pUserExperience,
     __in_z LPCWSTR wzPackageId,
     __in HRESULT hrStatus,
-    __in BOOTSTRAPPER_PACKAGE_STATE state,
-    __in BOOTSTRAPPER_REQUEST_STATE requested,
-    __in BOOTSTRAPPER_ACTION_STATE execute,
-    __in BOOTSTRAPPER_ACTION_STATE rollback
+    __in BOOTSTRAPPER_REQUEST_STATE requested
     );
 BAAPI UserExperienceOnPlanRelatedBundle(
     __in BURN_USER_EXPERIENCE* pUserExperience,
     __in_z LPCWSTR wzBundleId,
     __inout BOOTSTRAPPER_REQUEST_STATE* pRequestedState
     );
-BAAPI UserExperienceOnPlanTargetMsiPackage(
+BAAPI UserExperienceOnPlanPatchTarget(
     __in BURN_USER_EXPERIENCE* pUserExperience,
     __in_z LPCWSTR wzPackageId,
     __in_z LPCWSTR wzProductCode,

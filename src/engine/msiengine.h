@@ -27,16 +27,21 @@ HRESULT MsiEngineParsePropertiesFromXml(
 void MsiEnginePackageUninitialize(
     __in BURN_PACKAGE* pPackage
     );
+HRESULT MsiEngineDetectInitialize(
+    __in BURN_PACKAGES* pPackages
+    );
 HRESULT MsiEngineDetectPackage(
     __in BURN_PACKAGE* pPackage,
     __in BURN_USER_EXPERIENCE* pUserExperience
     );
-HRESULT MsiEnginePlanCalculatePackage(
+HRESULT MsiEnginePlanInitializePackage(
     __in BURN_PACKAGE* pPackage,
     __in BURN_VARIABLES* pVariables,
-    __in BURN_USER_EXPERIENCE* pUserExperience,
-    __in BOOL fInsideMsiTransaction,
-    __out_opt BOOL* pfBARequestedCache
+    __in BURN_USER_EXPERIENCE* pUserExperience
+    );
+HRESULT MsiEnginePlanCalculatePackage(
+    __in BURN_PACKAGE* pPackage,
+    __in BOOL fInsideMsiTransaction
     );
 HRESULT MsiEnginePlanAddPackage(
     __in BOOTSTRAPPER_DISPLAY display,
@@ -90,6 +95,7 @@ HRESULT MsiEngineCalculateInstallUiLevel(
     );
 void MsiEngineUpdateInstallRegistrationState(
     __in BURN_EXECUTE_ACTION* pAction,
+    __in BOOL fRollback,
     __in HRESULT hrExecute,
     __in BOOL fInsideMsiTransaction
     );

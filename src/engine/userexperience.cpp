@@ -111,7 +111,7 @@ extern "C" HRESULT UserExperienceLoad(
     args.pCommand = pCommand;
     args.pfnBootstrapperEngineProc = EngineForApplicationProc;
     args.pvBootstrapperEngineProcContext = pEngineContext;
-    args.qwEngineAPIVersion = MAKEQWORDVERSION(2021, 1, 30, 0);
+    args.qwEngineAPIVersion = MAKEQWORDVERSION(2021, 2, 18, 0);
 
     results.cbSize = sizeof(BOOTSTRAPPER_CREATE_RESULTS);
 
@@ -947,7 +947,7 @@ LExit:
     return hr;
 }
 
-EXTERN_C BAAPI UserExperienceOnDetectTargetMsiPackage(
+EXTERN_C BAAPI UserExperienceOnDetectPatchTarget(
     __in BURN_USER_EXPERIENCE* pUserExperience,
     __in_z LPCWSTR wzPackageId,
     __in_z LPCWSTR wzProductCode,
@@ -955,8 +955,8 @@ EXTERN_C BAAPI UserExperienceOnDetectTargetMsiPackage(
     )
 {
     HRESULT hr = S_OK;
-    BA_ONDETECTTARGETMSIPACKAGE_ARGS args = { };
-    BA_ONDETECTTARGETMSIPACKAGE_RESULTS results = { };
+    BA_ONDETECTPATCHTARGET_ARGS args = { };
+    BA_ONDETECTPATCHTARGET_RESULTS results = { };
 
     args.cbSize = sizeof(args);
     args.wzPackageId = wzPackageId;
@@ -965,8 +965,8 @@ EXTERN_C BAAPI UserExperienceOnDetectTargetMsiPackage(
 
     results.cbSize = sizeof(results);
 
-    hr = SendBAMessage(pUserExperience, BOOTSTRAPPER_APPLICATION_MESSAGE_ONDETECTTARGETMSIPACKAGE, &args, &results);
-    ExitOnFailure(hr, "BA OnDetectTargetMsiPackage failed.");
+    hr = SendBAMessage(pUserExperience, BOOTSTRAPPER_APPLICATION_MESSAGE_ONDETECTPATCHTARGET, &args, &results);
+    ExitOnFailure(hr, "BA OnDetectPatchTarget failed.");
 
     if (results.fCancel)
     {
@@ -1606,9 +1606,36 @@ LExit:
     return hr;
 }
 
+EXTERN_C BAAPI UserExperienceOnPlannedPackage(
+    __in BURN_USER_EXPERIENCE* pUserExperience,
+    __in_z LPCWSTR wzPackageId,
+    __in BOOTSTRAPPER_ACTION_STATE execute,
+    __in BOOTSTRAPPER_ACTION_STATE rollback
+    )
+{
+    HRESULT hr = S_OK;
+    BA_ONPLANNEDPACKAGE_ARGS args = { };
+    BA_ONPLANNEDPACKAGE_RESULTS results = { };
+
+    args.cbSize = sizeof(args);
+    args.wzPackageId = wzPackageId;
+    args.execute = execute;
+    args.rollback = rollback;
+
+    results.cbSize = sizeof(results);
+
+    hr = SendBAMessage(pUserExperience, BOOTSTRAPPER_APPLICATION_MESSAGE_ONPLANNEDPACKAGE, &args, &results);
+    ExitOnFailure(hr, "BA OnPlannedPackage failed.");
+
+LExit:
+    return hr;
+}
+
 EXTERN_C BAAPI UserExperienceOnPlanPackageBegin(
     __in BURN_USER_EXPERIENCE* pUserExperience,
     __in_z LPCWSTR wzPackageId,
+    __in BOOTSTRAPPER_PACKAGE_STATE state,
+    __in BOOL fInstallCondition,
     __inout BOOTSTRAPPER_REQUEST_STATE* pRequestedState
     )
 {
@@ -1618,6 +1645,8 @@ EXTERN_C BAAPI UserExperienceOnPlanPackageBegin(
 
     args.cbSize = sizeof(args);
     args.wzPackageId = wzPackageId;
+    args.state = state;
+    args.fInstallCondition = fInstallCondition;
     args.recommendedState = *pRequestedState;
 
     results.cbSize = sizeof(results);
@@ -1640,10 +1669,7 @@ EXTERN_C BAAPI UserExperienceOnPlanPackageComplete(
     __in BURN_USER_EXPERIENCE* pUserExperience,
     __in_z LPCWSTR wzPackageId,
     __in HRESULT hrStatus,
-    __in BOOTSTRAPPER_PACKAGE_STATE state,
-    __in BOOTSTRAPPER_REQUEST_STATE requested,
-    __in BOOTSTRAPPER_ACTION_STATE execute,
-    __in BOOTSTRAPPER_ACTION_STATE rollback
+    __in BOOTSTRAPPER_REQUEST_STATE requested
     )
 {
     HRESULT hr = S_OK;
@@ -1653,10 +1679,7 @@ EXTERN_C BAAPI UserExperienceOnPlanPackageComplete(
     args.cbSize = sizeof(args);
     args.wzPackageId = wzPackageId;
     args.hrStatus = hrStatus;
-    args.state = state;
     args.requested = requested;
-    args.execute = execute;
-    args.rollback = rollback;
 
     results.cbSize = sizeof(results);
 
@@ -1697,7 +1720,7 @@ LExit:
     return hr;
 }
 
-EXTERN_C BAAPI UserExperienceOnPlanTargetMsiPackage(
+EXTERN_C BAAPI UserExperienceOnPlanPatchTarget(
     __in BURN_USER_EXPERIENCE* pUserExperience,
     __in_z LPCWSTR wzPackageId,
     __in_z LPCWSTR wzProductCode,
@@ -1705,8 +1728,8 @@ EXTERN_C BAAPI UserExperienceOnPlanTargetMsiPackage(
     )
 {
     HRESULT hr = S_OK;
-    BA_ONPLANTARGETMSIPACKAGE_ARGS args = { };
-    BA_ONPLANTARGETMSIPACKAGE_RESULTS results = { };
+    BA_ONPLANPATCHTARGET_ARGS args = { };
+    BA_ONPLANPATCHTARGET_RESULTS results = { };
 
     args.cbSize = sizeof(args);
     args.wzPackageId = wzPackageId;
@@ -1716,8 +1739,8 @@ EXTERN_C BAAPI UserExperienceOnPlanTargetMsiPackage(
     results.cbSize = sizeof(results);
     results.requestedState = *pRequestedState;
 
-    hr = SendBAMessage(pUserExperience, BOOTSTRAPPER_APPLICATION_MESSAGE_ONPLANTARGETMSIPACKAGE, &args, &results);
-    ExitOnFailure(hr, "BA OnPlanTargetMsiPackage failed.");
+    hr = SendBAMessage(pUserExperience, BOOTSTRAPPER_APPLICATION_MESSAGE_ONPLANPATCHTARGET, &args, &results);
+    ExitOnFailure(hr, "BA OnPlanPatchTarget failed.");
 
     if (results.fCancel)
     {
