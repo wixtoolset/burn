@@ -399,7 +399,7 @@ extern "C" HRESULT ApplyUnregister(
 
     CalculateKeepRegistration(pEngineState, &fKeepRegistration);
 
-    hr = UserExperienceOnUnregisterBegin(&pEngineState->userExperience);
+    hr = UserExperienceOnUnregisterBegin(&pEngineState->userExperience, &fKeepRegistration);
     ExitOnRootFailure(hr, "BA aborted unregister begin.");
 
     // Calculate the correct resume mode. If a restart has been initiated, that trumps all other
@@ -435,7 +435,7 @@ extern "C" HRESULT ApplyUnregister(
     }
     else
     {
-        hr = RegistrationSessionEnd(&pEngineState->registration, resumeMode, restart, pEngineState->plan.dependencyRegistrationAction);
+        hr = RegistrationSessionEnd(&pEngineState->registration, &pEngineState->packages, resumeMode, restart, pEngineState->plan.dependencyRegistrationAction);
         ExitOnFailure(hr, "Failed to end session in per-user process.");
     }
 
