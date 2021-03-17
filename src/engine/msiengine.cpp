@@ -1033,7 +1033,7 @@ extern "C" HRESULT MsiEngineBeginTransaction(
 
     hr = WiuBeginTransaction(wzName, 0, phTransactionHandle, phChangeOfOwnerEvent, WIU_LOG_DEFAULT | INSTALLLOGMODE_VERBOSE, szLogPath);
 
-    if (E_ROLLBACK_DISABLED == hr)
+    if (HRESULT_FROM_WIN32(ERROR_ROLLBACK_DISABLED) == hr)
     {
         LogId(REPORT_ERROR, MSG_MSI_TRANSACTIONS_DISABLED);
     }
@@ -1045,27 +1045,12 @@ LExit:
 }
 
 extern "C" HRESULT MsiEngineCommitTransaction(
-    __inout MSIHANDLE *phTransactionHandle,
-    __inout HANDLE *phChangeOfOwnerEvent,
-    __in_z LPCWSTR szLogPath
     )
 {
     HRESULT hr = S_OK;
 
-    hr = WiuEndTransaction(MSITRANSACTIONSTATE_COMMIT, WIU_LOG_DEFAULT | INSTALLLOGMODE_VERBOSE, szLogPath);
+    hr = WiuEndTransaction(MSITRANSACTIONSTATE_COMMIT, WIU_LOG_DEFAULT | INSTALLLOGMODE_VERBOSE, NULL);
     ExitOnFailure(hr, "Failed to commit the MSI transaction");
-
-    if (*phTransactionHandle)
-    {
-        ::MsiCloseHandle(*phTransactionHandle);
-        *phTransactionHandle = NULL;
-    }
-
-    if (*phChangeOfOwnerEvent && (*phChangeOfOwnerEvent != INVALID_HANDLE_VALUE))
-    {
-        ::CloseHandle(*phChangeOfOwnerEvent);
-        *phChangeOfOwnerEvent = NULL;
-    }
 
 LExit:
 
