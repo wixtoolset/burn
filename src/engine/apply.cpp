@@ -34,9 +34,6 @@ typedef struct _BURN_EXECUTE_CONTEXT
     DWORD cExecutedPackages;
     DWORD cExecutePackagesTotal;
     DWORD* pcOverallProgressTicks;
-
-    MSIHANDLE hMsiTrns;
-    HANDLE hMsiTrnsEvent;
 } BURN_EXECUTE_CONTEXT;
 
 
@@ -2310,6 +2307,8 @@ static HRESULT ExecuteMsiBeginTransaction(
 {
     HRESULT hr = S_OK;
     BOOL fBeginCalled = FALSE;
+    MSIHANDLE hMsiTrns = NULL;
+    HANDLE hMsiTrnsEvent = NULL;
 
     if (pRollbackBoundary->fActiveTransaction)
     {
@@ -2329,7 +2328,7 @@ static HRESULT ExecuteMsiBeginTransaction(
     }
     else
     {
-        hr = MsiEngineBeginTransaction(pRollbackBoundary->sczId, &pContext->hMsiTrns, &pContext->hMsiTrnsEvent, NULL);
+        hr = MsiEngineBeginTransaction(pRollbackBoundary->sczId, &hMsiTrns, &hMsiTrnsEvent, NULL);
     }
 
     if (SUCCEEDED(hr))
@@ -2344,6 +2343,9 @@ LExit:
     {
         UserExperienceOnBeginMsiTransactionComplete(&pEngineState->userExperience, pRollbackBoundary->sczId, hr);
     }
+
+    ReleaseHandle(hMsiTrnsEvent);
+    ReleaseMsi(hMsiTrns);
 
     return hr;
 }
@@ -2375,7 +2377,7 @@ static HRESULT ExecuteMsiCommitTransaction(
     }
     else
     {
-        hr = MsiEngineCommitTransaction(&pContext->hMsiTrns, &pContext->hMsiTrnsEvent, NULL);
+        hr = MsiEngineCommitTransaction();
     }
 
     if (SUCCEEDED(hr))
@@ -2420,7 +2422,7 @@ static HRESULT ExecuteMsiRollbackTransaction(
     }
     else
     {
-        hr = MsiEngineRollbackTransaction(&pContext->hMsiTrns, &pContext->hMsiTrnsEvent, NULL);
+        hr = MsiEngineRollbackTransaction();
     }
 
 LExit:
