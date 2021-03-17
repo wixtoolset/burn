@@ -1757,13 +1757,6 @@ extern "C" HRESULT PlanRollbackBoundaryBegin(
     AssertSz(!pPlan->pActiveRollbackBoundary, "PlanRollbackBoundaryBegin called without completing previous RollbackBoundary");
     pPlan->pActiveRollbackBoundary = pRollbackBoundary;
 
-    // Best effort to support MSI transactions
-    if (pRollbackBoundary->fTransaction && !WiuIsMsiTransactionSupported())
-    {
-        pRollbackBoundary->fTransaction = FALSE;
-        LogId(REPORT_WARNING, MSG_UNSUPPORTED_MSI_TRANSACTION);
-    }
-
     // Add begin rollback boundary to execute plan.
     hr = PlanAppendExecuteAction(pPlan, &pExecuteAction);
     ExitOnFailure(hr, "Failed to append rollback boundary begin action.");

@@ -2259,9 +2259,9 @@ static HRESULT ExecuteDependencyAction(
                     BURN_MSPTARGETPRODUCT* pTargetProduct = pAction->packageDependency.pPackage->Msp.rgTargetProducts + i;
 
                     if (BURN_PACKAGE_REGISTRATION_STATE_IGNORED == pTargetProduct->registrationState)
-    {
+                    {
                         pTargetProduct->registrationState = BURN_PACKAGE_REGISTRATION_STATE_PRESENT;
-    }
+                    }
                 }
             }
             else if (BURN_PACKAGE_REGISTRATION_STATE_IGNORED == pAction->packageDependency.pPackage->installRegistrationState)
@@ -2302,7 +2302,7 @@ LExit:
 static HRESULT ExecuteMsiBeginTransaction(
     __in BURN_ENGINE_STATE* pEngineState,
     __in BURN_ROLLBACK_BOUNDARY* pRollbackBoundary,
-    __in BURN_EXECUTE_CONTEXT* pContext
+    __in BURN_EXECUTE_CONTEXT* /*pContext*/
     )
 {
     HRESULT hr = S_OK;
@@ -2353,7 +2353,7 @@ LExit:
 static HRESULT ExecuteMsiCommitTransaction(
     __in BURN_ENGINE_STATE* pEngineState,
     __in BURN_ROLLBACK_BOUNDARY* pRollbackBoundary,
-    __in BURN_EXECUTE_CONTEXT* pContext
+    __in BURN_EXECUTE_CONTEXT* /*pContext*/
     )
 {
     HRESULT hr = S_OK;
@@ -2399,7 +2399,7 @@ LExit:
 static HRESULT ExecuteMsiRollbackTransaction(
     __in BURN_ENGINE_STATE* pEngineState,
     __in BURN_ROLLBACK_BOUNDARY* pRollbackBoundary,
-    __in BURN_EXECUTE_CONTEXT* pContext
+    __in BURN_EXECUTE_CONTEXT* /*pContext*/
     )
 {
     HRESULT hr = S_OK;

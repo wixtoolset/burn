@@ -1069,13 +1069,6 @@ Skipping MSI property '%1!ls!' because condition '%2!ls!' evaluates to %3!hs!.
 .
 
 MessageId=701
-Severity=Warning
-SymbolicName=MSG_UNSUPPORTED_MSI_TRANSACTION
-Language=English
-Not starting an MSI transaction since Windows Installer version on this machine does not support it
-.
-
-MessageId=702
 Severity=Success
 SymbolicName=MSG_UX_DECLINED_MSI_TRANSACTION
 Language=English
