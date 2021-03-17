@@ -2785,7 +2785,7 @@ LExit:
 static HRESULT ExecuteMsiBeginTransaction(
     __in BURN_ENGINE_STATE* pEngineState,
     __in BURN_ROLLBACK_BOUNDARY* pRollbackBoundary,
-    __in BURN_EXECUTE_CONTEXT* pContext
+    __in BURN_EXECUTE_CONTEXT* /*pContext*/
     )
 {
     HRESULT hr = S_OK;
@@ -2836,7 +2836,7 @@ LExit:
 static HRESULT ExecuteMsiCommitTransaction(
     __in BURN_ENGINE_STATE* pEngineState,
     __in BURN_ROLLBACK_BOUNDARY* pRollbackBoundary,
-    __in BURN_EXECUTE_CONTEXT* pContext
+    __in BURN_EXECUTE_CONTEXT* /*pContext*/
     )
 {
     HRESULT hr = S_OK;
@@ -2882,7 +2882,7 @@ LExit:
 static HRESULT ExecuteMsiRollbackTransaction(
     __in BURN_ENGINE_STATE* pEngineState,
     __in BURN_ROLLBACK_BOUNDARY* pRollbackBoundary,
-    __in BURN_EXECUTE_CONTEXT* pContext
+    __in BURN_EXECUTE_CONTEXT* /*pContext*/
     )
 {
     HRESULT hr = S_OK;
