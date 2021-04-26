@@ -1927,7 +1927,6 @@ static void ResetPlannedRollbackBoundaryState(
     )
 {
     pRollbackBoundary->fActiveTransaction = FALSE;
-    ReleaseNullStr(pRollbackBoundary->sczLogPath);
 }
 
 static HRESULT GetActionDefaultRequestState(

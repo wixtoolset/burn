@@ -1045,15 +1045,28 @@ LExit:
 }
 
 extern "C" HRESULT MsiEngineCommitTransaction(
+    __inout MSIHANDLE * phTransactionHandle,
+    __inout HANDLE * phChangeOfOwnerEvent,
+    __in_z LPCWSTR szLogPath
     )
 {
     HRESULT hr = S_OK;
 
-    hr = WiuEndTransaction(MSITRANSACTIONSTATE_COMMIT, WIU_LOG_DEFAULT | INSTALLLOGMODE_VERBOSE, NULL);
+    hr = WiuEndTransaction(MSITRANSACTIONSTATE_COMMIT, WIU_LOG_DEFAULT | INSTALLLOGMODE_VERBOSE, szLogPath);
     ExitOnFailure(hr, "Failed to commit the MSI transaction");
 
-LExit:
+    if (phChangeOfOwnerEvent && *phChangeOfOwnerEvent && INVALID_HANDLE_VALUE != *phChangeOfOwnerEvent)
+    {
+        ::CloseHandle(phChangeOfOwnerEvent);
+        *phChangeOfOwnerEvent = NULL;
+    }
+    if (phTransactionHandle && *phTransactionHandle)
+    {
+        ::MsiCloseHandle(*phTransactionHandle);
+        *phTransactionHandle = NULL;
+    }
 
+LExit:
     return hr;
 }
 
@@ -1065,22 +1078,19 @@ extern "C" HRESULT MsiEngineRollbackTransaction(
 {
     HRESULT hr = S_OK;
 
-
     hr = WiuEndTransaction(MSITRANSACTIONSTATE_ROLLBACK, WIU_LOG_DEFAULT | INSTALLLOGMODE_VERBOSE, szLogPath);
     ExitOnFailure(hr, "Failed to rollback the MSI transaction");
 
-    if (*phTransactionHandle)
+    if (phChangeOfOwnerEvent && *phChangeOfOwnerEvent && INVALID_HANDLE_VALUE != *phChangeOfOwnerEvent)
+    {
+        ::CloseHandle(phChangeOfOwnerEvent);
+        *phChangeOfOwnerEvent = NULL;
+    }
+    if (phTransactionHandle && *phTransactionHandle)
     {
         ::MsiCloseHandle(*phTransactionHandle);
         *phTransactionHandle = NULL;
     }
-
-    if (*phChangeOfOwnerEvent && (*phChangeOfOwnerEvent != INVALID_HANDLE_VALUE))
-    {
-        ::CloseHandle(*phChangeOfOwnerEvent);
-        *phChangeOfOwnerEvent = NULL;
-    }
-
 
 LExit:
 

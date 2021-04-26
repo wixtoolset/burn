@@ -3045,52 +3045,35 @@ LExit:
     ReleaseHandle(hMsiTrnsEvent);
     ReleaseMsi(hMsiTrns);
 
-    if (pRollbackBoundary)
-    {
-        pRollbackBoundary->sczLogPath = NULL;
-    }
-
     return hr;
 }
 
 static HRESULT OnMsiCommitTransaction(
-    __in BURN_ELEVATION_CHILD_MESSAGE_CONTEXT* pContext,
     __in BYTE* /*pbData*/,
     __in DWORD /*cbData*/
     )
 {
     HRESULT hr = S_OK;
 
-    hr = MsiEngineCommitTransaction();
+    hr = MsiEngineCommitTransaction(NULL, NULL, NULL);
     ExitOnFailure(hr, "Failed committing an MSI transaction");
 
 LExit:
-
-    if (pRollbackBoundary)
-    {
-        pRollbackBoundary->sczLogPath = NULL;
-    }
 
     return hr;
 }
 
 static HRESULT OnMsiRollbackTransaction(
-    __in BURN_ELEVATION_CHILD_MESSAGE_CONTEXT* pContext,
     __in BYTE* /*pbData*/,
     __in DWORD /*cbData*/
     )
 {
     HRESULT hr = S_OK;
 
-    hr = MsiEngineRollbackTransaction();
+    hr = MsiEngineRollbackTransaction(NULL, NULL, NULL);
     ExitOnFailure(hr, "Failed rolling back an MSI transaction");
 
 LExit:
-
-    if (pRollbackBoundary)
-    {
-        pRollbackBoundary->sczLogPath = NULL;
-    }
 
     return hr;
 }

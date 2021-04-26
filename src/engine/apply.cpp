@@ -2860,7 +2860,7 @@ static HRESULT ExecuteMsiCommitTransaction(
     }
     else
     {
-        hr = MsiEngineCommitTransaction();
+        hr = MsiEngineCommitTransaction(NULL, NULL, NULL);
     }
 
     if (SUCCEEDED(hr))
@@ -2905,7 +2905,7 @@ static HRESULT ExecuteMsiRollbackTransaction(
     }
     else
     {
-        hr = MsiEngineRollbackTransaction();
+        hr = MsiEngineRollbackTransaction(NULL, NULL, NULL);
     }
 
 LExit:
