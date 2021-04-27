@@ -7,7 +7,6 @@
 #define BURNMSIREPAIR_PROPERTY_NAME L"BURNMSIREPAIR"
 #define BURNMSIUNINSTALL_PROPERTY_NAME L"BURNMSIUNINSTALL"
 
-
 #if defined(__cplusplus)
 extern "C" {
 #endif
@@ -53,13 +52,20 @@ HRESULT MsiEnginePlanAddPackage(
     __in_opt HANDLE hCacheEvent
     );
 HRESULT MsiEngineBeginTransaction(
-    __in BURN_ROLLBACK_BOUNDARY* pRollbackBoundary
+    __in LPCWSTR wzName,
+    __out MSIHANDLE *phTransactionHandle,
+    __out HANDLE *phChangeOfOwnerEvent,
+    __in_z LPCWSTR szLogPath
     );
 HRESULT MsiEngineCommitTransaction(
-    __in BURN_ROLLBACK_BOUNDARY* pRollbackBoundary
+    __inout MSIHANDLE *phTransactionHandle,
+    __inout HANDLE *phChangeOfOwnerEvent,
+    __in_z LPCWSTR szLogPath
     );
 HRESULT MsiEngineRollbackTransaction(
-    __in BURN_ROLLBACK_BOUNDARY* pRollbackBoundary
+    __inout MSIHANDLE *phTransactionHandle,
+    __inout HANDLE *phChangeOfOwnerEvent,
+    __in_z LPCWSTR szLogPath
     );
 HRESULT MsiEngineExecutePackage(
     __in_opt HWND hwndParent,

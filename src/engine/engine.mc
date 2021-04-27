@@ -1088,3 +1088,10 @@ SymbolicName=MSG_PENDING_REBOOT_DETECTED
 Language=English
 A reboot is pending from a prior execution of this bundle: %1!ls!. Apply will be blocked. Continuing...
 .
+
+MessageId=702
+Severity=Success
+SymbolicName=MSG_UX_DECLINED_MSI_TRANSACTION
+Language=English
+UX voted against MSI transaction on rollback boundary '%1!ls!'
+.

@@ -1023,16 +1023,15 @@ LExit:
 }
 
 extern "C" HRESULT MsiEngineBeginTransaction(
-    __in BURN_ROLLBACK_BOUNDARY* pRollbackBoundary
+    __in LPCWSTR wzName,
+    __out MSIHANDLE *phTransactionHandle,
+    __out HANDLE *phChangeOfOwnerEvent,
+    __in_z LPCWSTR szLogPath
     )
 {
     HRESULT hr = S_OK;
-    MSIHANDLE hTransactionHandle = NULL;
-    HANDLE hChangeOfOwnerEvent = NULL;
 
-    LogId(REPORT_STANDARD, MSG_MSI_TRANSACTION_BEGIN, pRollbackBoundary->sczId);
-
-    hr = WiuBeginTransaction(pRollbackBoundary->sczId, 0, &hTransactionHandle, &hChangeOfOwnerEvent, WIU_LOG_DEFAULT | INSTALLLOGMODE_VERBOSE, pRollbackBoundary->sczLogPath);
+    hr = WiuBeginTransaction(wzName, 0, phTransactionHandle, phChangeOfOwnerEvent, WIU_LOG_DEFAULT | INSTALLLOGMODE_VERBOSE, szLogPath);
 
     if (HRESULT_FROM_WIN32(ERROR_ROLLBACK_DISABLED) == hr)
     {
@@ -1042,38 +1041,56 @@ extern "C" HRESULT MsiEngineBeginTransaction(
     ExitOnFailure(hr, "Failed to begin an MSI transaction");
 
 LExit:
-    ReleaseMsi(hTransactionHandle);
-    ReleaseHandle(hChangeOfOwnerEvent);
-
     return hr;
 }
 
 extern "C" HRESULT MsiEngineCommitTransaction(
-    __in BURN_ROLLBACK_BOUNDARY* pRollbackBoundary
+    __inout MSIHANDLE * phTransactionHandle,
+    __inout HANDLE * phChangeOfOwnerEvent,
+    __in_z LPCWSTR szLogPath
     )
 {
     HRESULT hr = S_OK;
 
-    LogId(REPORT_STANDARD, MSG_MSI_TRANSACTION_COMMIT, pRollbackBoundary->sczId);
-
-    hr = WiuEndTransaction(MSITRANSACTIONSTATE_COMMIT, WIU_LOG_DEFAULT | INSTALLLOGMODE_VERBOSE, pRollbackBoundary->sczLogPath);
+    hr = WiuEndTransaction(MSITRANSACTIONSTATE_COMMIT, WIU_LOG_DEFAULT | INSTALLLOGMODE_VERBOSE, szLogPath);
     ExitOnFailure(hr, "Failed to commit the MSI transaction");
 
-LExit:
+    if (phChangeOfOwnerEvent && *phChangeOfOwnerEvent && INVALID_HANDLE_VALUE != *phChangeOfOwnerEvent)
+    {
+        ::CloseHandle(phChangeOfOwnerEvent);
+        *phChangeOfOwnerEvent = NULL;
+    }
+    if (phTransactionHandle && *phTransactionHandle)
+    {
+        ::MsiCloseHandle(*phTransactionHandle);
+        *phTransactionHandle = NULL;
+    }
 
+LExit:
     return hr;
 }
 
 extern "C" HRESULT MsiEngineRollbackTransaction(
-    __in BURN_ROLLBACK_BOUNDARY* pRollbackBoundary
+    __inout MSIHANDLE *phTransactionHandle,
+    __inout HANDLE *phChangeOfOwnerEvent,
+    __in_z LPCWSTR szLogPath
     )
 {
     HRESULT hr = S_OK;
 
-    LogId(REPORT_WARNING, MSG_MSI_TRANSACTION_ROLLBACK, pRollbackBoundary->sczId);
-
-    hr = WiuEndTransaction(MSITRANSACTIONSTATE_ROLLBACK, WIU_LOG_DEFAULT | INSTALLLOGMODE_VERBOSE, pRollbackBoundary->sczLogPath);
+    hr = WiuEndTransaction(MSITRANSACTIONSTATE_ROLLBACK, WIU_LOG_DEFAULT | INSTALLLOGMODE_VERBOSE, szLogPath);
     ExitOnFailure(hr, "Failed to rollback the MSI transaction");
+
+    if (phChangeOfOwnerEvent && *phChangeOfOwnerEvent && INVALID_HANDLE_VALUE != *phChangeOfOwnerEvent)
+    {
+        ::CloseHandle(phChangeOfOwnerEvent);
+        *phChangeOfOwnerEvent = NULL;
+    }
+    if (phTransactionHandle && *phTransactionHandle)
+    {
+        ::MsiCloseHandle(*phTransactionHandle);
+        *phTransactionHandle = NULL;
+    }
 
 LExit:
 

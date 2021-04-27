@@ -61,6 +61,9 @@ static HRESULT ProcessPackage(
     );
 static HRESULT ProcessPackageRollbackBoundary(
     __in BURN_PLAN* pPlan,
+    __in BURN_USER_EXPERIENCE* pUX,
+    __in BURN_LOGGING* pLog,
+    __in BURN_VARIABLES* pVariables,
     __in_opt BURN_ROLLBACK_BOUNDARY* pEffectiveRollbackBoundary,
     __inout BURN_ROLLBACK_BOUNDARY** ppRollbackBoundary
     );
@@ -921,7 +924,7 @@ static HRESULT ProcessPackage(
     BURN_ROLLBACK_BOUNDARY* pEffectiveRollbackBoundary = NULL;
 
     pEffectiveRollbackBoundary = (BOOTSTRAPPER_ACTION_UNINSTALL == pPlan->action) ? pPackage->pRollbackBoundaryBackward : pPackage->pRollbackBoundaryForward;
-    hr = ProcessPackageRollbackBoundary(pPlan, pEffectiveRollbackBoundary, ppRollbackBoundary);
+    hr = ProcessPackageRollbackBoundary(pPlan, pUX, pLog, pVariables, pEffectiveRollbackBoundary, ppRollbackBoundary);
     ExitOnFailure(hr, "Failed to process package rollback boundary.");
 
     if (BOOTSTRAPPER_ACTION_LAYOUT == pPlan->action)
@@ -958,6 +961,9 @@ LExit:
 
 static HRESULT ProcessPackageRollbackBoundary(
     __in BURN_PLAN* pPlan,
+    __in BURN_USER_EXPERIENCE* pUX,
+    __in BURN_LOGGING* pLog,
+    __in BURN_VARIABLES* pVariables,
     __in_opt BURN_ROLLBACK_BOUNDARY* pEffectiveRollbackBoundary,
     __inout BURN_ROLLBACK_BOUNDARY** ppRollbackBoundary
     )
@@ -975,7 +981,7 @@ static HRESULT ProcessPackageRollbackBoundary(
         }
 
         // Start new rollback boundary.
-        hr = PlanRollbackBoundaryBegin(pPlan, pEffectiveRollbackBoundary);
+        hr = PlanRollbackBoundaryBegin(pPlan, pUX, pLog, pVariables, pEffectiveRollbackBoundary);
         ExitOnFailure(hr, "Failed to plan rollback boundary begin.");
 
         *ppRollbackBoundary = pEffectiveRollbackBoundary;
@@ -1705,6 +1711,9 @@ LExit:
 
 extern "C" HRESULT PlanRollbackBoundaryBegin(
     __in BURN_PLAN* pPlan,
+    __in BURN_USER_EXPERIENCE * pUX,
+    __in BURN_LOGGING * pLog,
+    __in BURN_VARIABLES * pVariables,
     __in BURN_ROLLBACK_BOUNDARY* pRollbackBoundary
     )
 {
@@ -1729,16 +1738,30 @@ extern "C" HRESULT PlanRollbackBoundaryBegin(
     pExecuteAction->rollbackBoundary.pRollbackBoundary = pRollbackBoundary;
 
     // Add begin MSI transaction to execute plan.
-    if (pRollbackBoundary->fTransaction)
+    pRollbackBoundary->fTransaction = pRollbackBoundary->fTransactionAuthored;
+    if (pRollbackBoundary->fTransactionAuthored)
     {
-        hr = PlanExecuteCheckpoint(pPlan);
-        ExitOnFailure(hr, "Failed to append checkpoint before MSI transaction begin action.");
+        LoggingIncrementPackageSequence();
+        LoggingSetTransactionVariable(pRollbackBoundary, NULL, pLog, pVariables); // ignore errors.
 
-        hr = PlanAppendExecuteAction(pPlan, &pExecuteAction);
-        ExitOnFailure(hr, "Failed to append MSI transaction begin action.");
+        hr = UserExperienceOnPlanMsiTransaction(pUX, pRollbackBoundary->sczId, &pRollbackBoundary->fTransaction);
+        ExitOnRootFailure(hr, "BA aborted plan MSI transaction.");
 
-        pExecuteAction->type = BURN_EXECUTE_ACTION_TYPE_BEGIN_MSI_TRANSACTION;
-        pExecuteAction->msiTransaction.pRollbackBoundary = pRollbackBoundary;
+        if (pRollbackBoundary->fTransaction)
+        {
+            hr = PlanExecuteCheckpoint(pPlan);
+            ExitOnFailure(hr, "Failed to append checkpoint before MSI transaction begin action.");
+
+            hr = PlanAppendExecuteAction(pPlan, &pExecuteAction);
+            ExitOnFailure(hr, "Failed to append MSI transaction begin action.");
+
+            pExecuteAction->type = BURN_EXECUTE_ACTION_TYPE_BEGIN_MSI_TRANSACTION;
+            pExecuteAction->msiTransaction.pRollbackBoundary = pRollbackBoundary;
+        }
+        else
+        {
+            LogId(REPORT_STANDARD, MSG_UX_DECLINED_MSI_TRANSACTION, pRollbackBoundary->sczId);
+        }
     }
 
 LExit:
