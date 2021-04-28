@@ -909,6 +909,9 @@ namespace Bootstrapper
 
             ::InitializeCriticalSection(&pEngineState->userExperience.csEngineActive);
 
+            hr = WiuInitialize();
+            NativeAssert::Succeeded(hr, "Failed to initliaze wiutil.");
+
             hr = VariableInitialize(&pEngineState->variables);
             NativeAssert::Succeeded(hr, "Failed to initialize variables.");
 

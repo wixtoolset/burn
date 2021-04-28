@@ -420,6 +420,11 @@ BAAPI UserExperienceOnPlanComplete(
     __in BURN_USER_EXPERIENCE* pUserExperience,
     __in HRESULT hrStatus
     );
+BAAPI UserExperienceOnPlanMsiTransaction(
+    __in BURN_USER_EXPERIENCE* pUserExperience,
+    __in_z LPCWSTR wzTransactionId,
+    __inout BOOL *pfTransaction
+    );
 BAAPI UserExperienceOnPlanForwardCompatibleBundle(
     __in BURN_USER_EXPERIENCE* pUserExperience,
     __in_z LPCWSTR wzBundleId,

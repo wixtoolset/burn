@@ -258,6 +258,37 @@ LExit:
     return hr;
 }
 
+extern "C" HRESULT LoggingSetTransactionVariable(
+    __in BURN_ROLLBACK_BOUNDARY* pRollbackBoundary,
+    __in_z_opt LPCWSTR wzSuffix,
+    __in BURN_LOGGING* pLog,
+    __in BURN_VARIABLES* pVariables
+    )
+{
+    HRESULT hr = S_OK;
+    LPWSTR szLogPath = NULL;
+
+    // Make sure that no log files are created when logging has been disabled via Log element.
+    if (BURN_LOGGING_STATE_DISABLED == pLog->state)
+    {
+        ExitFunction();
+    }
+
+    if (pRollbackBoundary && pRollbackBoundary->szLogPathVariable && *pRollbackBoundary->szLogPathVariable)
+    {
+        hr = StrAllocFormatted(&szLogPath, L"%ls%hs%ls_%03u_%ls.%ls", pLog->sczPrefix, wzSuffix && *wzSuffix ? "_" : "", wzSuffix && *wzSuffix ? wzSuffix : L"", vdwPackageSequence, pRollbackBoundary->sczId, pLog->sczExtension);
+        ExitOnFailure(hr, "Failed to allocate path for transaction log.");
+
+        hr = VariableSetString(pVariables, pRollbackBoundary->szLogPathVariable, szLogPath, FALSE, FALSE);
+        ExitOnFailure(hr, "Failed to set log path into variable.");
+    }
+
+LExit:
+    ReleaseStr(szLogPath);
+
+    return hr;
+}
+
 extern "C" LPCSTR LoggingBurnActionToString(
     __in BOOTSTRAPPER_ACTION action
     )
