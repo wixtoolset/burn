@@ -993,6 +993,7 @@ extern "C" HRESULT RegistrationSaveState(
     LPWSTR sczVariableKey = NULL;
     BYTE* pbRegBuffer = NULL;
     SIZE_T cbRegBuffer = 0;
+    DWORD dwRegBuffer = 0;
 
 
     // build variable registry key path
@@ -1057,7 +1058,10 @@ extern "C" HRESULT RegistrationSaveState(
             hr = BuffWriteString(&pbRegBuffer, &cbRegBuffer, scz);
             ExitOnFailure(hr, "Failed to write variable value to buffer.");
 
-            hr = RegWriteBinary(hkRegistration, sczName, pbRegBuffer, cbRegBuffer);
+            hr = SIZETToDWord(cbRegBuffer, &dwRegBuffer);
+            ExitOnFailure(hr, "Failed to convert SIZE_T to DWORD.");
+
+            hr = RegWriteBinary(hkRegistration, sczName, pbRegBuffer, dwRegBuffer);
             ExitOnFailure(hr, "Failed to write variable to registry.");
 
             SecureZeroMemory(pbRegBuffer, cbRegBuffer);
@@ -1074,7 +1078,10 @@ extern "C" HRESULT RegistrationSaveState(
             hr = BuffWriteString(&pbRegBuffer, &cbRegBuffer, scz);
             ExitOnFailure(hr, "Failed to write variable value to buffer.");
 
-            hr = RegWriteBinary(hkRegistration, sczName, pbRegBuffer, cbRegBuffer);
+            hr = SIZETToDWord(cbRegBuffer, &dwRegBuffer);
+            ExitOnFailure(hr, "Failed to convert SIZE_T to DWORD.");
+
+            hr = RegWriteBinary(hkRegistration, sczName, pbRegBuffer, dwRegBuffer);
             ExitOnFailure(hr, "Failed to write variable to registry.");
 
             SecureZeroMemory(pbRegBuffer, cbRegBuffer);
