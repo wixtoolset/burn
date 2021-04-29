@@ -155,6 +155,72 @@ LExit:
     return hr;
 }
 
+static HRESULT BAEngineRelatedBundleGetVariableType(
+    __in BOOTSTRAPPER_ENGINE_CONTEXT* /*pContext*/,
+    __in const LPVOID pvArgs,
+    __inout LPVOID pvResults
+)
+{
+    HRESULT hr = S_OK;
+    ValidateMessageArgs(hr, pvArgs, BAENGINE_RELATEDBUNDLE_GETVARIABLETYPE_ARGS, pArgs);
+    ValidateMessageResults(hr, pvResults, BAENGINE_RELATEDBUNDLE_GETVARIABLETYPE_RESULTS, pResults);
+
+    hr = ExternalEngineRelatedBundleGetVariableType(pArgs->wzBundleId, pArgs->wzVariable, &pResults->dwType);
+
+LExit:
+    return hr;
+}
+
+static HRESULT BAEngineRelatedBundleGetVariableNumeric(
+    __in BOOTSTRAPPER_ENGINE_CONTEXT* /*pContext*/,
+    __in const LPVOID pvArgs,
+    __inout LPVOID pvResults
+)
+{
+    HRESULT hr = S_OK;
+    ValidateMessageArgs(hr, pvArgs, BAENGINE_RELATEDBUNDLE_GETVARIABLENUMERIC_ARGS, pArgs);
+    ValidateMessageResults(hr, pvResults, BAENGINE_RELATEDBUNDLE_GETVARIABLENUMERIC_RESULTS, pResults);
+
+    hr = ExternalEngineRelatedBundleGetVariableNumeric(pArgs->wzBundleId, pArgs->wzVariable, &pResults->llValue);
+
+LExit:
+    return hr;
+}
+
+static HRESULT BAEngineRelatedBundleGetVariableString(
+    __in BOOTSTRAPPER_ENGINE_CONTEXT* /*pContext*/,
+    __in const LPVOID pvArgs,
+    __inout LPVOID pvResults
+)
+{
+    HRESULT hr = S_OK;
+    ValidateMessageArgs(hr, pvArgs, BAENGINE_RELATEDBUNDLE_GETVARIABLESTRING_ARGS, pArgs);
+    ValidateMessageResults(hr, pvResults, BAENGINE_RELATEDBUNDLE_GETVARIABLESTRING_RESULTS, pResults);
+
+    hr = ExternalEngineRelatedBundleGetVariableString(pArgs->wzBundleId, pArgs->wzVariable, pResults->wzValue, &pResults->cchValue);
+
+LExit:
+    return hr;
+}
+
+/*
+static HRESULT BAEngineRelatedBundleGetVariableVersion(
+    __in BOOTSTRAPPER_ENGINE_CONTEXT* pContext,
+    __in const LPVOID pvArgs,
+    __inout LPVOID pvResults
+)
+{
+    HRESULT hr = S_OK;
+    ValidateMessageArgs(hr, pvArgs, BAENGINE_RELATEDBUNDLE_GETVARIABLEVERSION_ARGS, pArgs);
+    ValidateMessageResults(hr, pvResults, BAENGINE_RELATEDBUNDLE_GETVARIABLEVERSION_RESULTS, pResults);
+
+    hr = ExternalEngineRelatedBundleGetVariableVersion(pContext->pEngineState, pArgs->wzVariable, pResults->wzValue, &pResults->cchValue);
+
+LExit:
+    return hr;
+}
+*/
+
 static HRESULT BAEngineSendEmbeddedError(
     __in BOOTSTRAPPER_ENGINE_CONTEXT* pContext,
     __in const LPVOID pvArgs,
@@ -519,6 +585,20 @@ HRESULT WINAPI EngineForApplicationProc(
     case BOOTSTRAPPER_ENGINE_MESSAGE_COMPAREVERSIONS:
         hr = BAEngineCompareVersions(pContext, pvArgs, pvResults);
         break;
+    case BOOTSTRAPPER_ENGINE_MESSAGE_RELATEDBUNDLE_GETVARIABLETYPE:
+        hr = BAEngineRelatedBundleGetVariableType(pContext, pvArgs, pvResults);
+        break;
+    case BOOTSTRAPPER_ENGINE_MESSAGE_RELATEDBUNDLE_GETVARIABLENUMERIC:
+        hr = BAEngineRelatedBundleGetVariableNumeric(pContext, pvArgs, pvResults);
+        break;
+    case BOOTSTRAPPER_ENGINE_MESSAGE_RELATEDBUNDLE_GETVARIABLESTRING:
+        hr = BAEngineRelatedBundleGetVariableString(pContext, pvArgs, pvResults);
+        break;
+        /*
+    case BOOTSTRAPPER_ENGINE_MESSAGE_RELATEDBUNDLE_GETVARIABLEVERSION:
+        hr = BAEngineRelatedBundleGetVariableVersion(pContext, pvArgs, pvResults);
+        break;
+        */
     default:
         hr = E_NOTIMPL;
         break;

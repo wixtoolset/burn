@@ -176,6 +176,34 @@ HRESULT WINAPI ExternalEngineValidateMessageParameter(
     __in DWORD dwMinimumSize
     );
 
+HRESULT ExternalEngineRelatedBundleGetVariableType(
+    __in_z LPCWSTR wzBundleId,
+    __in_z LPCWSTR wzVariable,
+    __out DWORD* pdwType
+);
+
+HRESULT ExternalEngineRelatedBundleGetVariableNumeric(
+    __in_z LPCWSTR wzBundleId,
+    __in_z LPCWSTR wzVariable,
+    __out LONGLONG* pllValue
+);
+
+HRESULT ExternalEngineRelatedBundleGetVariableString(
+    __in_z LPCWSTR wzBundleId,
+    __in_z LPCWSTR wzVariable,
+    __out_ecount_opt(*pcchValue) LPWSTR wzValue,
+    __inout DWORD* pcchValue
+);
+
+/*
+HRESULT ExternalEngineRelatedBundleGetVariableVersion(
+    __in BURN_ENGINE_STATE* pEngineState,
+    __in_z LPCWSTR wzBundleId,
+    __in_z LPCWSTR wzVariable,
+    __out_ecount_opt(*pcchValue) LPWSTR wzValue,
+    __inout DWORD* pcchValue
+);
+*/
 #if defined(__cplusplus)
 }
 #endif

@@ -184,6 +184,136 @@ HRESULT ExternalEngineLog(
     return hr;
 }
 
+HRESULT ExternalEngineRelatedBundleGetVariableType(
+    __in_z LPCWSTR wzBundleId,
+    __in_z LPCWSTR wzVariable,
+    __out DWORD* pdwType
+)
+{
+    HRESULT hr = S_OK;
+    DWORD dwType;
+
+    if (wzVariable && *wzVariable && pdwType)
+    {
+        hr = BundleGetBundleVariable(wzBundleId, wzVariable, &dwType, NULL, NULL);
+        ExitOnFailure(hr, "Unable to read related bundle %ls variable %ls", wzBundleId, wzVariable);
+
+        switch (dwType)
+        {
+        case REG_SZ:
+            *pdwType = BURN_VARIANT_TYPE_STRING;
+            break;
+        case REG_QWORD:
+            *pdwType = BURN_VARIANT_TYPE_NUMERIC; // | BURN_VARIANT_TYPE_VERSION
+            break;
+        default:
+            *pdwType = BURN_VARIANT_TYPE_NONE;
+        }
+    }
+    else
+    {
+        hr = E_INVALIDARG;
+    }
+LExit:
+    return hr;
+}
+
+HRESULT ExternalEngineRelatedBundleGetVariableNumeric(
+    __in_z LPCWSTR wzBundleId,
+    __in_z LPCWSTR wzVariable,
+    __out LONGLONG* pllValue
+)
+{
+    HRESULT hr = S_OK;
+
+    if (wzVariable && *wzVariable && pllValue)
+    {
+        hr = BundleGetBundleNumericVariable(wzBundleId, wzVariable, pllValue);
+        if (E_MOREDATA != hr)
+        {
+            ExitOnFailure(hr, "Unable to read related bundle %ls shared variable %ls", wzBundleId, wzVariable);
+        }
+    }
+    else
+    {
+        *pllValue = 0;
+        hr = E_INVALIDARG;
+    }
+LExit:
+    return hr;
+}
+
+HRESULT ExternalEngineRelatedBundleGetVariableString(
+    __in_z LPCWSTR wzBundleId,
+    __in_z LPCWSTR wzVariable,
+    __out_ecount_opt(*pcchValue) LPWSTR wzValue,
+    __inout DWORD* pcchValue
+)
+{
+    HRESULT hr = S_OK;
+    LPWSTR sczValue = NULL;
+    DWORD dwRemaining = 0;
+    // size_t cchRemaining = 0;
+
+    if (wzVariable && *wzVariable)
+    {
+        hr = BundleGetBundleStringVariable(wzBundleId, wzVariable, sczValue, &dwRemaining);
+        if (E_MOREDATA != hr)
+        {
+            ExitOnFailure(hr, "Unable to read related bundle %ls variable %ls", wzBundleId, wzVariable);
+        }
+
+        hr = StrAlloc(&sczValue, dwRemaining);
+        ExitOnFailure(hr, "Failed to allocate buffer for variable.");
+
+        hr = BundleGetBundleStringVariable(wzBundleId, wzVariable, sczValue, &dwRemaining);
+        if (SUCCEEDED(hr))
+        {
+            hr = CopyStringToExternal(sczValue, wzValue, pcchValue);
+        }
+    }
+    else
+    {
+        hr = E_INVALIDARG;
+    }
+
+LExit:
+    StrSecureZeroFreeString(sczValue);
+
+    return hr;
+}
+
+/*
+HRESULT ExternalEngineRelatedBundleGetVariableVersion(
+    __in BURN_ENGINE_STATE* pEngineState,
+    __in_z LPCWSTR wzBundleId,
+    __in_z LPCWSTR wzVariable,
+    __out_ecount_opt(*pcchValue) LPWSTR wzValue,
+    __inout DWORD* pcchValue
+)
+{
+    HRESULT hr = S_OK;
+    VERUTIL_VERSION* pVersion = NULL;
+
+    if (wzVariable && *wzVariable)
+    {
+        hr = VariableGetVersion(&pEngineState->variables, wzVariable, &pVersion);
+        if (SUCCEEDED(hr))
+        {
+            hr = CopyStringToExternal(pVersion->sczVersion, wzValue, pcchValue);
+        }
+    }
+    else
+    {
+        hr = E_INVALIDARG;
+    }
+
+    ReleaseVerutilVersion(pVersion);
+
+    return hr;
+}
+*/
+
 HRESULT ExternalEngineSendEmbeddedError(
     __in BURN_ENGINE_STATE* pEngineState,
     __in const DWORD dwErrorCode,

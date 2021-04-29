@@ -54,6 +54,7 @@
 #include <atomutil.h>
 #include <apuputil.h>
 #include <dpiutil.h>
+#include <butil.h>
 
 #include "..\WixToolset.BootstrapperCore.Native\inc\BootstrapperEngine.h"
 #include "..\WixToolset.BootstrapperCore.Native\inc\BootstrapperApplication.h"

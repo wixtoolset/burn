@@ -1095,6 +1095,7 @@ namespace Bootstrapper
             NativeAssert::Succeeded(hr, "Failed to copy provider key");
 
             dependencyProvider.fImported = TRUE;
+            dependencyProvider.sczDisplayName = L"";
 
             hr = StrAllocString(&dependencyProvider.sczVersion, wzVersion, 0);
             NativeAssert::Succeeded(hr, "Failed to copy version");
@@ -1110,7 +1111,7 @@ namespace Bootstrapper
             pRelatedBundle->fPlannable = TRUE;
             pRelatedBundle->relationType = BOOTSTRAPPER_RELATION_UPGRADE;
 
-            hr = PseudoBundleInitialize(0, &pRelatedBundle->package, TRUE, wzId, pRelatedBundle->relationType, BOOTSTRAPPER_PACKAGE_STATE_PRESENT, TRUE, NULL, NULL, NULL, 0, FALSE, L"-quiet", L"-repair -quiet", L"-uninstall -quiet", &dependencyProvider, NULL, 0);
+            hr = PseudoBundleInitialize(0, &pRelatedBundle->package, TRUE, wzId, pRelatedBundle->relationType, BOOTSTRAPPER_PACKAGE_STATE_PRESENT, TRUE, L"", L"", NULL, 0, FALSE, L"-quiet", L"-repair -quiet", L"-uninstall -quiet", &dependencyProvider, NULL, 0);
             NativeAssert::Succeeded(hr, "Failed to initialize related bundle to represent bundle: %ls", wzId);
 
             ++pRelatedBundles->cRelatedBundles;

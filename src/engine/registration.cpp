@@ -32,6 +32,7 @@ const LPCWSTR REGISTRY_BUNDLE_RESUME_COMMAND_LINE = L"BundleResumeCommandLine";
 const LPCWSTR REGISTRY_BUNDLE_VERSION_MAJOR = L"VersionMajor";
 const LPCWSTR REGISTRY_BUNDLE_VERSION_MINOR = L"VersionMinor";
 const LPCWSTR SWIDTAG_FOLDER = L"swidtag";
+const LPCWSTR REGISTRY_BUNDLE_VARIABLE_KEY = L"variables";
 
 // internal function declarations
 
@@ -659,7 +660,7 @@ extern "C" HRESULT RegistrationSessionBegin(
             hr = RegWriteString(hkRegistration, BURN_REGISTRATION_REGISTRY_BUNDLE_TAG, pRegistration->sczTag);
             ExitOnFailure(hr, "Failed to write %ls value.", BURN_REGISTRATION_REGISTRY_BUNDLE_TAG);
         }
-
+        
         hr = RegWriteStringFormatted(hkRegistration, BURN_REGISTRATION_REGISTRY_ENGINE_VERSION, L"%hs", szVerMajorMinorBuild);
         ExitOnFailure(hr, "Failed to write %ls value.", BURN_REGISTRATION_REGISTRY_ENGINE_VERSION);
 
@@ -881,6 +882,7 @@ extern "C" HRESULT RegistrationSessionEnd(
 {
     HRESULT hr = S_OK;
     LPWSTR sczRebootRequiredKey = NULL;
+    LPWSTR sczVariableKey = NULL;
     HKEY hkRebootRequired = NULL;
     HKEY hkRegistration = NULL;
 
@@ -928,6 +930,17 @@ extern "C" HRESULT RegistrationSessionEnd(
 
         RemoveSoftwareTags(pVariables, &pRegistration->softwareTags);
 
+        // build variable registry key path
+        hr = StrAllocFormatted(&sczVariableKey, L"%s\\%s", pRegistration->sczRegistrationKey, REGISTRY_BUNDLE_VARIABLE_KEY);
+        ExitOnFailure(hr, "Failed to build variable registry key path.");
+
+        // Delete registration variable key.
+        hr = RegDelete(pRegistration->hkRoot, sczVariableKey, REG_KEY_DEFAULT, FALSE);
+        if (E_FILENOTFOUND != hr)
+        {
+            ExitOnFailure(hr, "Failed to delete registration variable key: %ls", sczVariableKey);
+        }
+
         // Delete registration key.
         hr = RegDelete(pRegistration->hkRoot, pRegistration->sczRegistrationKey, REG_KEY_DEFAULT, FALSE);
         if (E_FILENOTFOUND != hr)
@@ -951,6 +964,7 @@ extern "C" HRESULT RegistrationSessionEnd(
 LExit:
     ReleaseRegKey(hkRegistration);
     ReleaseRegKey(hkRebootRequired);
+    ReleaseStr(sczVariableKey);
     ReleaseStr(sczRebootRequiredKey);
 
     return hr;
@@ -966,6 +980,7 @@ extern "C" HRESULT RegistrationSaveState(
     __in SIZE_T cbBuffer
     )
 {
+    /*
     HRESULT hr = S_OK;
 
     // write data to file
@@ -976,11 +991,195 @@ extern "C" HRESULT RegistrationSaveState(
         hr = S_OK;
     }
     ExitOnFailure(hr, "Failed to write state to file: %ls", pRegistration->sczStateFile);
+    */
+    HRESULT hr = S_OK;
+    DWORD cVariables = 0;
+    LPWSTR sczName = NULL;
+    BOOL fIncluded = FALSE;
+    BURN_VARIANT value = { };
+    LPWSTR scz = NULL;
+    DWORD64 qw = 0;
+    VERUTIL_VERSION* pVersion = NULL;
+    SIZE_T iBuffer = 0;
+    HKEY hkRegistration = NULL;
+    LPWSTR sczVariableKey = NULL;
+
+
+    // build variable registry key path
+    hr = StrAllocFormatted(&sczVariableKey, L"%s\\%s", pRegistration->sczRegistrationKey, REGISTRY_BUNDLE_VARIABLE_KEY);
+    ExitOnFailure(hr, "Failed to build variable registry key path.");
+
+    // create registration key
+    hr = RegCreate(pRegistration->hkRoot, sczVariableKey, KEY_WRITE, &hkRegistration);
+    ExitOnFailure(hr, "Failed to create registration variable key.");
+
+
+    // Read variable count.
+    hr = BuffReadNumber(pbBuffer, cbBuffer, &iBuffer, &cVariables);
+    ExitOnFailure(hr, "Failed to read variable count.");
+
+    // Read variables.
+    for (DWORD i = 0; i < cVariables; ++i)
+    {
+        // Read variable included flag.
+        hr = BuffReadNumber(pbBuffer, cbBuffer, &iBuffer, (DWORD*)&fIncluded);
+        ExitOnFailure(hr, "Failed to read variable included flag.");
+
+        if (!fIncluded)
+        {
+            continue; // if variable is not included, skip.
+        }
+
+        // Read variable name.
+        hr = BuffReadString(pbBuffer, cbBuffer, &iBuffer, &sczName);
+        ExitOnFailure(hr, "Failed to read variable name.");
+
+        // Read variable value type.
+        hr = BuffReadNumber(pbBuffer, cbBuffer, &iBuffer, (DWORD*)&value.Type);
+        ExitOnFailure(hr, "Failed to read variable value type.");
+
+        // Read variable value.
+        switch (value.Type)
+        {
+        case BURN_VARIANT_TYPE_NONE:
+            hr = RegWriteString(hkRegistration, sczName, L"");
+            ExitOnFailure(hr, "Failed to set variable value.");
+
+            break;
+        case BURN_VARIANT_TYPE_NUMERIC:
+            hr = BuffReadNumber64(pbBuffer, cbBuffer, &iBuffer, &qw);
+            ExitOnFailure(hr, "Failed to read variable value as number.");
+
+            hr = RegWriteQword(hkRegistration, sczName, qw);
+            //hr = BVariantSetNumeric(&value, static_cast<LONGLONG>(qw));
+            ExitOnFailure(hr, "Failed to set variable value.");
+
+            SecureZeroMemory(&qw, sizeof(qw));
+            break;
+        case BURN_VARIANT_TYPE_VERSION: __fallthrough;
+            /*
+            hr = BuffReadString(pbBuffer, cbBuffer, &iBuffer, &scz);
+            ExitOnFailure(hr, "Failed to read variable value as string.");
+
+            hr = RegWriteString(hkRegistration, sczName, scz);
+
+            hr = VerParseVersion(scz, 0, FALSE, &pVersion);
+            ExitOnFailure(hr, "Failed to parse variable value as version.");
+
+            hr = BVariantSetVersion(&value, pVersion);
+            ExitOnFailure(hr, "Failed to set variable value.");
+
+            SecureZeroMemory(&qw, sizeof(qw));
+            break;
+            */
+        case BURN_VARIANT_TYPE_FORMATTED: __fallthrough;
+        case BURN_VARIANT_TYPE_STRING:
+            hr = BuffReadString(pbBuffer, cbBuffer, &iBuffer, &scz);
+            ExitOnFailure(hr, "Failed to read variable value as string.");
+
+            //hr = BVariantSetString(&value, scz, NULL, BURN_VARIANT_TYPE_FORMATTED == value.Type);
+            hr = RegWriteString(hkRegistration, sczName, scz);
+            ExitOnFailure(hr, "Failed to set variable value.");
+
+            ReleaseNullStrSecure(scz);
+            break;
+        default:
+            hr = E_INVALIDARG;
+            ExitOnFailure(hr, "Unsupported variable type.");
+        }
+
+        // Set variable.
+        // hr = SetVariableValue(pVariables, sczName, &value, fWasPersisted ? SET_VARIABLE_OVERRIDE_PERSISTED_BUILTINS : SET_VARIABLE_ANY, FALSE);
+        // ExitOnFailure(hr, "Failed to set variable.");
+
+        // Clean up.
+        BVariantUninitialize(&value);
+    }
 
 LExit:
+
+    ReleaseVerutilVersion(pVersion);
+    ReleaseStr(sczName);
+    ReleaseStr(sczVariableKey);
+    BVariantUninitialize(&value);
+    SecureZeroMemory(&qw, sizeof(qw));
+    StrSecureZeroFreeString(scz);
+    ReleaseRegKey(hkRegistration);
+
     return hr;
 }
 
+/*
+extern "C" HRESULT RegistrationSaveVariables(
+    __in BURN_REGISTRATION * pRegistration,
+    __in BURN_VARIABLES * pVariables
+)
+{
+    HRESULT hr = S_OK;
+    HKEY hkRegistration = NULL;
+    LONGLONG ll = 0;
+    LPWSTR scz = NULL;
+    DWORD64 qw = 0;
+    LPWSTR sczVariableKey = NULL;
+
+
+    if (pVariables->rgVariables)
+    {
+        // build variable registry key path
+        hr = StrAllocFormatted(&sczVariableKey, L"%s\\%s", pRegistration->sczRegistrationKey, REGISTRY_BUNDLE_VARIABLE_KEY);
+        ExitOnFailure(hr, "Failed to build variable registry key path.");
+
+        // create registration key
+        hr = RegCreate(pRegistration->hkRoot, sczVariableKey, KEY_WRITE, &hkRegistration);
+        ExitOnFailure(hr, "Failed to create registration variable key.");
+
+
+        for (DWORD i = 0; i < pVariables->cVariables; ++i)
+        {
+            BURN_VARIABLE* pVariable = &pVariables->rgVariables[i];
+
+            if (TRUE == pVariable->fPersisted)
+            {
+                // Write variable value.
+                switch (pVariable->Value.Type)
+                {
+                case BURN_VARIANT_TYPE_NONE:
+                    break;
+                case BURN_VARIANT_TYPE_NUMERIC:
+                    hr = BVariantGetNumeric(&pVariable->Value, &ll);
+                    ExitOnFailure(hr, "Failed to get numeric.");
+
+                    hr = RegWriteQword(hkRegistration, pVariable->sczName, ll);
+                    ExitOnFailure(hr, "Failed to write %ls value.", pVariable->sczName);
+                    // Write
+                    SecureZeroMemory(&ll, sizeof(ll));
+                    break;
+                case BURN_VARIANT_TYPE_VERSION: __fallthrough;
+                case BURN_VARIANT_TYPE_FORMATTED: __fallthrough;
+                case BURN_VARIANT_TYPE_STRING:
+                    hr = BVariantGetString(&pVariable->Value, &scz);
+                    ExitOnFailure(hr, "Failed to get string.");
+
+                    hr = RegWriteString(hkRegistration, pVariable->sczName, scz);
+                    ExitOnFailure(hr, "Failed to write %ls value.", pVariable->sczName);
+
+                    ReleaseNullStrSecure(scz);
+                    break;
+                default:
+                    hr = E_INVALIDARG;
+                    ExitOnFailure(hr, "Unsupported variable type.");
+                }
+            }
+        }
+    }
+LExit:
+    ReleaseRegKey(hkRegistration);
+    SecureZeroMemory(&ll, sizeof(ll));
+    SecureZeroMemory(&qw, sizeof(qw));
+    StrSecureZeroFreeString(scz);
+    return hr;
+}
+*/
 /*******************************************************************
  RegistrationLoadState - Loads a previously stored engine state BLOB.
 
@@ -991,11 +1190,263 @@ extern "C" HRESULT RegistrationLoadState(
     __out SIZE_T* pcbBuffer
     )
 {
+/*
     // read data from file
     HRESULT hr = FileRead(ppbBuffer, pcbBuffer, pRegistration->sczStateFile);
     return hr;
-}
+*/
 
+    HRESULT hr = S_OK;
+    // BOOL fIncluded = FALSE;
+    LONGLONG ll = 0;
+    LPWSTR scz = NULL;
+    HKEY hkRegistration = NULL;
+    LPWSTR sczVariableKey = NULL;
+    LPWSTR sczValueName = NULL;
+    DWORD dwType = 0;
+    DWORD dwIndex = 0;
+    BURN_VARIABLE* rgVariables = NULL;
+    DWORD cVariables = 0;
+    
+
+    // build variable registry key path
+    hr = StrAllocFormatted(&sczVariableKey, L"%s\\%s", pRegistration->sczRegistrationKey, REGISTRY_BUNDLE_VARIABLE_KEY);
+    ExitOnFailure(hr, "Failed to build variable registry key path.");
+
+    // open registration variable key
+    hr = RegCreate(pRegistration->hkRoot, sczVariableKey, KEY_READ, &hkRegistration);
+    ExitOnFailure(hr, "Failed to create registration variable key.");
+
+    while (E_NOMOREITEMS != (hr = RegValueEnum(hkRegistration, dwIndex, &sczValueName, &dwType)))
+    {
+        ExitOnFailure(hr, "Failed to enumerate value %u", dwIndex);
+
+        hr = MemEnsureArraySize(reinterpret_cast<LPVOID*>(&rgVariables), cVariables+1, sizeof(BURN_VARIABLE), 2);
+        ExitOnFailure(hr, "Failed to resize array while variable value");
+
+        hr = StrAllocString(&rgVariables[cVariables].sczName, sczValueName, 0);
+        ExitOnFailure(hr, "Failed to allocate variable name");
+
+        switch (dwType)
+        {
+            case REG_SZ:
+                rgVariables[cVariables].Value.Type = BURN_VARIANT_TYPE_STRING;
+                hr = RegReadString(hkRegistration, sczValueName, &rgVariables[cVariables].Value.sczValue);
+                ExitOnFailure(hr, "Failed to read registry value setting: %ls", sczValueName);
+                break;
+            case REG_QWORD:
+                rgVariables[cVariables].Value.Type = BURN_VARIANT_TYPE_NUMERIC;
+                hr = RegReadQword(hkRegistration, sczValueName, reinterpret_cast<DWORD64*>(&rgVariables[cVariables].Value.llValue));
+                ExitOnFailure(hr, "Failed to read registry value setting: %ls", sczValueName);
+                break;
+            default:
+                hr = E_INVALIDARG;
+                ExitOnFailure(hr, "Unsupported variable registry value type.");
+        }
+        ++dwIndex;
+        ++cVariables;
+    }
+
+    // Write variable count.
+    hr = BuffWriteNumber(ppbBuffer, pcbBuffer, cVariables);
+    ExitOnFailure(hr, "Failed to write variable count.");
+
+    // Write variables.
+    for (DWORD i = 0; i < cVariables; ++i)
+    {
+        BURN_VARIABLE* pVariable = &rgVariables[i];
+
+        // If we aren't persisting, include only variables that aren't rejected by the elevated process.
+        // If we are persisting, include only variables that should be persisted.
+/*
+        fIncluded = (!fPersisting && BURN_VARIABLE_INTERNAL_TYPE_BUILTIN != pVariable->internalType) ||
+            (fPersisting && pVariable->fPersisted);
+*/
+        // Write included flag.
+        hr = BuffWriteNumber(ppbBuffer, pcbBuffer, (DWORD)TRUE);
+        ExitOnFailure(hr, "Failed to write included flag.");
+        /*
+        if (!fIncluded)
+        {
+            continue;
+        }
+        */
+        // Write variable name.
+        hr = BuffWriteString(ppbBuffer, pcbBuffer, pVariable->sczName);
+        ExitOnFailure(hr, "Failed to write variable name.");
+
+        // Write variable value type.
+        hr = BuffWriteNumber(ppbBuffer, pcbBuffer, (DWORD)pVariable->Value.Type);
+        ExitOnFailure(hr, "Failed to write variable value type.");
+
+        // Write variable value.
+        switch (pVariable->Value.Type)
+        {
+        case BURN_VARIANT_TYPE_NONE:
+            break;
+        case BURN_VARIANT_TYPE_NUMERIC:
+            hr = BVariantGetNumeric(&pVariable->Value, &ll);
+            ExitOnFailure(hr, "Failed to get numeric.");
+
+            hr = BuffWriteNumber64(ppbBuffer, pcbBuffer, static_cast<DWORD64>(ll));
+            ExitOnFailure(hr, "Failed to write variable value as number.");
+
+            SecureZeroMemory(&ll, sizeof(ll));
+            break;
+        case BURN_VARIANT_TYPE_VERSION: __fallthrough;
+        case BURN_VARIANT_TYPE_FORMATTED: __fallthrough;
+        case BURN_VARIANT_TYPE_STRING:
+            hr = BVariantGetString(&pVariable->Value, &scz);
+            ExitOnFailure(hr, "Failed to get string.");
+
+            hr = BuffWriteString(ppbBuffer, pcbBuffer, scz);
+            ExitOnFailure(hr, "Failed to write variable value as string.");
+
+            ReleaseNullStrSecure(scz);
+            break;
+        default:
+            hr = E_INVALIDARG;
+            ExitOnFailure(hr, "Unsupported variable type.");
+        }
+    }
+
+LExit:
+    if (rgVariables)
+    {
+        for (DWORD i = 0; i < cVariables; ++i)
+        {
+            BURN_VARIABLE* pVariable = &rgVariables[i];
+            ReleaseStr(pVariable->sczName);
+            BVariantUninitialize(&pVariable->Value);
+        }
+        MemFree(rgVariables);
+    }
+
+    SecureZeroMemory(&ll, sizeof(ll));
+    StrSecureZeroFreeString(scz);
+
+
+    ReleaseStr(sczVariableKey);
+    ReleaseStr(sczValueName);
+    ReleaseRegKey(hkRegistration);
+    return hr;
+
+}
+/*
+HRESULT RegistrationLoadVariables(
+    __in BURN_REGISTRATION* pRegistration,
+    __in BURN_VARIABLES* pVariables
+)
+{
+    HRESULT hr = S_OK;
+    LPWSTR sczName = NULL;
+    // BOOL fIncluded = FALSE;
+    BURN_VARIANT value = { };
+    // LONGLONG ll = 0;
+    LPWSTR scz = NULL;
+    DWORD64 qw = 0;
+    VERUTIL_VERSION* pVersion = NULL;
+    BURN_VARIABLE* pVariable = NULL;
+    HKEY hkRegistration = NULL;
+    LPWSTR sczVariableKey = NULL;
+
+    // build variable registry key path
+    hr = StrAllocFormatted(&sczVariableKey, L"%s\\%s", pRegistration->sczRegistrationKey, REGISTRY_BUNDLE_VARIABLE_KEY);
+    ExitOnFailure(hr, "Failed to build variable registry key path.");
+
+    // create registration key
+    hr = RegCreate(pRegistration->hkRoot, sczVariableKey, KEY_READ, &hkRegistration);
+    ExitOnFailure(hr, "Failed to create registration variable key.");
+
+    ::EnterCriticalSection(&pVariables->csAccess);
+
+    // Read variables.
+    for (DWORD i = 0; i < pVariables->cVariables; ++i)
+    {
+        pVariable = &pVariables->rgVariables[i];
+
+        if (!pVariable->fPersisted)
+        {
+            continue; // if variable is not persisted, skip.
+        }
+        
+        // Read variable value.
+        switch (pVariable->Value.Type)
+        {
+        case BURN_VARIANT_TYPE_NONE:
+            break;
+        case BURN_VARIANT_TYPE_NUMERIC:
+
+            hr = RegReadQword(hkRegistration, pVariable->sczName, &qw);
+            ExitOnFailure(hr, "Failed to read %ls value.", pVariable->sczName);
+
+
+            // hr = BVariantSetNumeric(&value, static_cast<LONGLONG>(qw));
+            // ExitOnFailure(hr, "Failed to set variable value.");            
+
+            // Set variable.
+            //hr = SetVariableValue(pVariables, pVariable->sczName, &value, pVariable->fPersisted ? SET_VARIABLE_OVERRIDE_PERSISTED_BUILTINS : SET_VARIABLE_ANY, FALSE);
+            //ExitOnFailure(hr, "Failed to set variable.")
+            hr = VariableSetNumeric(pVariables, pVariable->sczName, static_cast<LONGLONG>(qw), pVariable->fPersisted);
+            ExitOnFailure(hr, "Failed to set variable.");
+
+            SecureZeroMemory(&qw, sizeof(qw));
+            break;
+        case BURN_VARIANT_TYPE_VERSION:
+            hr = RegReadString(hkRegistration, pVariable->sczName, &scz);
+            ExitOnFailure(hr, "Failed to read %ls value.", pVariable->sczName);
+
+            hr = VerParseVersion(scz, 0, FALSE, &pVersion);
+            ExitOnFailure(hr, "Failed to parse variable value as version.");
+
+            ReleaseNullStrSecure(scz);
+
+            hr = VariableSetVersion(pVariables, pVariable->sczName, pVersion, pVariable->fPersisted);
+            //hr = BVariantSetVersion(&value, pVersion);
+            ExitOnFailure(hr, "Failed to set variable value.");
+
+            SecureZeroMemory(&qw, sizeof(qw));
+            break;
+        case BURN_VARIANT_TYPE_FORMATTED: __fallthrough;
+        case BURN_VARIANT_TYPE_STRING:
+            hr = RegReadString(hkRegistration, pVariable->sczName, &scz);
+            ExitOnFailure(hr, "Failed to read %ls value.", pVariable->sczName);
+
+            hr = VariableSetString(pVariables, pVariable->sczName, scz, pVariable->fPersisted, BURN_VARIANT_TYPE_FORMATTED == pVariable->Value.Type);
+            // hr = BVariantSetString(&value, scz, NULL, BURN_VARIANT_TYPE_FORMATTED == pVariable->Value.Type);
+            ExitOnFailure(hr, "Failed to set variable value.");
+
+            ReleaseNullStrSecure(scz);
+            break;
+        default:
+            hr = E_INVALIDARG;
+            ExitOnFailure(hr, "Unsupported variable type.");
+        }
+
+        // Set variable.
+        //hr = SetVariableValue(pVariables, pVariable->sczName, &value, pVariable->fPersisted ? SET_VARIABLE_OVERRIDE_PERSISTED_BUILTINS : SET_VARIABLE_ANY, FALSE);
+        //ExitOnFailure(hr, "Failed to set variable.");
+
+        // Clean up.
+        BVariantUninitialize(&value);
+    }
+
+LExit:
+    ::LeaveCriticalSection(&pVariables->csAccess);
+
+    ReleaseVerutilVersion(pVersion);
+    ReleaseStr(sczName);
+    BVariantUninitialize(&value);
+    SecureZeroMemory(&qw, sizeof(qw));
+    StrSecureZeroFreeString(scz);
+
+    ReleaseStr(sczVariableKey);
+    ReleaseRegKey(hkRegistration);
+
+    return hr;
+
+}
+*/
 /*******************************************************************
 RegistrationGetResumeCommandLine - Gets the resume command line from the registry
 

@@ -494,7 +494,7 @@ namespace Bootstrapper
             }
         }
 
-        [Fact(Skip = "Currently fails")]
+        [Fact]//(Skip = "Currently fails")]
         void ResumeTest()
         {
             HRESULT hr = S_OK;
@@ -510,6 +510,9 @@ namespace Bootstrapper
             BOOTSTRAPPER_RESUME_TYPE resumeType = BOOTSTRAPPER_RESUME_TYPE_NONE;
             BYTE* pbBuffer = NULL;
             SIZE_T cbBuffer = 0;
+            SIZE_T piBuffer = 0;
+            LONGLONG llMyBurnVariable = 0;
+
             String^ cacheDirectory = Path::Combine(Path::Combine(Environment::GetFolderPath(Environment::SpecialFolder::LocalApplicationData), gcnew String(L"Package Cache")), gcnew String(L"{D54F896D-1952-43e6-9C67-B5652240618C}"));
             try
             {
@@ -517,6 +520,51 @@ namespace Bootstrapper
                 {
                     rgbData[i] = (BYTE)i;
                 }
+                /*
+                // add fake variables: a string, a number
+                pbBuffer = &rgbData[0];
+                hr = BuffWriteNumber(&pbBuffer, &cbBuffer, 3);
+                TestThrowOnFailure(hr, L"Failed to write the number of variables.");
+
+                hr = BuffWriteNumber(&pbBuffer, &cbBuffer, TRUE);
+                TestThrowOnFailure(hr, L"Failed to write the include flag.");
+
+                hr = BuffWriteString(&pbBuffer, &cbBuffer, L"AString");
+                TestThrowOnFailure(hr, L"Failed to write the string variable name.");
+
+                hr = BuffWriteNumber(&pbBuffer, &cbBuffer, BURN_VARIANT_TYPE_STRING);
+                TestThrowOnFailure(hr, L"Failed to write the string variable type.");
+
+                hr = BuffWriteString(&pbBuffer, &cbBuffer, L"AStringValue");
+                TestThrowOnFailure(hr, L"Failed to write the string variable value.");
+
+                hr = BuffWriteNumber(&pbBuffer, &cbBuffer, TRUE);
+                TestThrowOnFailure(hr, L"Failed to write the include flag.");
+
+                hr = BuffWriteString(&pbBuffer, &cbBuffer, L"ANumber");
+                TestThrowOnFailure(hr, L"Failed to write the number variable name.");
+
+                hr = BuffWriteNumber(&pbBuffer, &cbBuffer, BURN_VARIANT_TYPE_NUMERIC);
+                TestThrowOnFailure(hr, L"Failed to write the number variable type.");
+
+                hr = BuffWriteNumber(&pbBuffer, &cbBuffer, 42);
+                TestThrowOnFailure(hr, L"Failed to write the number variable value.");
+
+                hr = BuffWriteNumber(&pbBuffer, &cbBuffer, TRUE);
+                TestThrowOnFailure(hr, L"Failed to write the include flag.");
+
+                hr = BuffWriteString(&pbBuffer, &cbBuffer, L"AFormattedString");
+                TestThrowOnFailure(hr, L"Failed to write the formatted string variable name.");
+
+                hr = BuffWriteNumber(&pbBuffer, &cbBuffer, BURN_VARIANT_TYPE_FORMATTED);
+                TestThrowOnFailure(hr, L"Failed to write the formatted string variable type.");
+
+                hr = BuffWriteString(&pbBuffer, &cbBuffer, L"[DesktopFolder]\\Foo");
+                TestThrowOnFailure(hr, L"Failed to write the formatted string variable value.");
+
+                cbBuffer = 0;
+                */
+                
 
                 // set mock API's
                 RegFunctionOverride(RegistrationTest_RegCreateKeyExW, RegistrationTest_RegOpenKeyExW, RegistrationTest_RegDeleteKeyExW, NULL, NULL, NULL, NULL, NULL, NULL);
@@ -526,13 +574,15 @@ namespace Bootstrapper
                 logging.sczPath = L"BurnUnitTest.txt";
 
                 LPCWSTR wzDocument =
-                    L"<Bundle>"
+                    L"<Bundle xmlns='http://wixtoolset.org/schemas/v4/wxs'"
+                    L"        xmlns:bal='http://wixtoolset.org/schemas/v4/wxs/bal'>"
                     L"    <UX>"
                     L"        <Payload Id='ux.dll' FilePath='ux.dll' Packaging='embedded' SourcePath='ux.dll' Hash='000000000000' />"
                     L"    </UX>"
                     L"    <Registration Id='{D54F896D-1952-43e6-9C67-B5652240618C}' UpgradeCode='{D54F896D-1952-43e6-9C67-B5652240618C}' Tag='foo' ProviderKey='foo' Version='1.0.0.0' ExecutableName='setup.exe' PerMachine='no'>"
                     L"        <Arp Register='yes' Publisher='WiX Toolset' DisplayName='RegisterBasicTest' DisplayVersion='1.0.0.0' />"
                     L"    </Registration>"
+                    L"    <Variable Id='MyBurnVariable1' bal:Overridable='yes' Type='numeric' Value='0' Hidden='no' Persisted='yes' />"
                     L"</Bundle>";
 
                 // load XML document
@@ -540,6 +590,8 @@ namespace Bootstrapper
 
                 hr = VariableInitialize(&variables);
                 TestThrowOnFailure(hr, L"Failed to initialize variables.");
+
+                hr = VariablesParseFromXml(&variables, pixeBundle);
 
                 hr = UserExperienceParseFromXml(&userExperience, pixeBundle);
                 TestThrowOnFailure(hr, L"Failed to parse UX from XML.");
@@ -563,8 +615,22 @@ namespace Bootstrapper
                 hr = RegistrationSessionBegin(sczCurrentProcess, &registration, &variables, BURN_REGISTRATION_ACTION_OPERATIONS_WRITE_REGISTRATION, BURN_DEPENDENCY_REGISTRATION_ACTION_REGISTER, 0);
                 TestThrowOnFailure(hr, L"Failed to register bundle.");
 
-                hr = RegistrationSaveState(&registration, rgbData, sizeof(rgbData));
+                llMyBurnVariable = 42;
+
+                hr = VariableSetNumeric(&variables, L"MyBurnVariable1", llMyBurnVariable, FALSE);
+                TestThrowOnFailure(hr, "Failed to set variable value 'MyBurnVariable1'.");
+
+                hr = VariableSerialize(&variables, TRUE, &pbBuffer, &cbBuffer);
+                TestThrowOnFailure(hr, "Failed to serialize variables.");
+
+                hr = RegistrationSaveState(&registration, pbBuffer, cbBuffer);
                 TestThrowOnFailure(hr, L"Failed to save state.");
+
+                // Munge variable so we know we reloaded
+                llMyBurnVariable = 1;
+
+                hr = VariableSetNumeric(&variables, L"MyBurnVariable1", llMyBurnVariable, FALSE);
+                TestThrowOnFailure(hr, "Failed to set variable value 'MyBurnVariable1'.");
 
                 // read interrupted resume type
                 hr = RegistrationDetectResumeType(&registration, &resumeType);
@@ -586,15 +652,26 @@ namespace Bootstrapper
                 Assert::Equal((int)BOOTSTRAPPER_RESUME_TYPE_SUSPEND, (int)resumeType);
 
                 // read state back
+                cbBuffer = 0;
+
                 hr = RegistrationLoadState(&registration, &pbBuffer, &cbBuffer);
                 TestThrowOnFailure(hr, L"Failed to load state.");
 
-                Assert::Equal((SIZE_T)sizeof(rgbData), cbBuffer);
-                Assert::True(0 == memcmp(pbBuffer, rgbData, sizeof(rgbData)));
+                
+                hr = VariableDeserialize(&variables, TRUE, pbBuffer, cbBuffer, &piBuffer);
+
+                // THis is no longer the case.  We only store Persisted variables
+                //Assert::Equal((SIZE_T)sizeof(rgbData), cbBuffer);
+                //Assert::True(0 == memcmp(pbBuffer, rgbData, sizeof(rgbData)));
 
                 // write active resume mode
                 hr = RegistrationSessionResume(&registration, &variables);
                 TestThrowOnFailure(hr, L"Failed to write active resume mode.");
+
+                // find existing variable
+                hr = VariableGetNumeric(&variables, L"MyBurnVariable1", &llMyBurnVariable);
+                TestThrowOnFailure(hr, "Failed to find variable value 'MyBurnVariable1'.");
+                Assert::Equal((LONGLONG)42, llMyBurnVariable);
 
                 // verify that run key was put back
                 Assert::NotEqual((Object^)nullptr, Registry::GetValue(gcnew String(TEST_RUN_KEY), gcnew String(L"{D54F896D-1952-43e6-9C67-B5652240618C}"), nullptr));
