@@ -10,6 +10,7 @@
 #define REGISTRY_RUN_KEY L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnce"
 
 #define TEST_UNINSTALL_KEY L"HKEY_CURRENT_USER\\" HKCU_PATH L"\\" REGISTRY_UNINSTALL_KEY L"\\{D54F896D-1952-43e6-9C67-B5652240618C}"
+#define TEST_UNINSTALL_VARIABLES_KEY L"HKEY_CURRENT_USER\\" HKCU_PATH L"\\" REGISTRY_UNINSTALL_KEY L"\\{D54F896D-1952-43e6-9C67-B5652240618C}" L"\\variables"
 #define TEST_RUN_KEY L"HKEY_CURRENT_USER\\" HKCU_PATH L"\\" REGISTRY_RUN_KEY
 
 
@@ -512,6 +513,7 @@ namespace Bootstrapper
             SIZE_T cbBuffer = 0;
             SIZE_T piBuffer = 0;
             LONGLONG llMyBurnVariable = 0;
+            String^ myBurnStringVariable = gcnew String(L"bar");            
 
             String^ cacheDirectory = Path::Combine(Path::Combine(Environment::GetFolderPath(Environment::SpecialFolder::LocalApplicationData), gcnew String(L"Package Cache")), gcnew String(L"{D54F896D-1952-43e6-9C67-B5652240618C}"));
             try
@@ -583,6 +585,8 @@ namespace Bootstrapper
                     L"        <Arp Register='yes' Publisher='WiX Toolset' DisplayName='RegisterBasicTest' DisplayVersion='1.0.0.0' />"
                     L"    </Registration>"
                     L"    <Variable Id='MyBurnVariable1' bal:Overridable='yes' Type='numeric' Value='0' Hidden='no' Persisted='yes' />"
+                    L"    <Variable Id='MyBurnVariable2' bal:Overridable='yes' Type='string' Value='foo' Hidden='no' Persisted='yes' />"
+                    L"    <Variable Id='MyBurnVariable3' bal:Overridable='yes' Type='version' Value='v1.1-alpha' Hidden='no' Persisted='yes' />"
                     L"</Bundle>";
 
                 // load XML document
@@ -615,10 +619,10 @@ namespace Bootstrapper
                 hr = RegistrationSessionBegin(sczCurrentProcess, &registration, &variables, BURN_REGISTRATION_ACTION_OPERATIONS_WRITE_REGISTRATION, BURN_DEPENDENCY_REGISTRATION_ACTION_REGISTER, 0);
                 TestThrowOnFailure(hr, L"Failed to register bundle.");
 
-                llMyBurnVariable = 42;
+                VariableSetNumericHelper(&variables, L"MyBurnVariable1", 42);
+                VariableSetStringHelper(&variables, L"MyBurnVariable2", L"bar", FALSE);
+                VariableSetVersionHelper(&variables, L"MyBurnVariable3", L"v1.0-beta");
 
-                hr = VariableSetNumeric(&variables, L"MyBurnVariable1", llMyBurnVariable, FALSE);
-                TestThrowOnFailure(hr, "Failed to set variable value 'MyBurnVariable1'.");
 
                 hr = VariableSerialize(&variables, TRUE, &pbBuffer, &cbBuffer);
                 TestThrowOnFailure(hr, "Failed to serialize variables.");
@@ -627,10 +631,9 @@ namespace Bootstrapper
                 TestThrowOnFailure(hr, L"Failed to save state.");
 
                 // Munge variable so we know we reloaded
-                llMyBurnVariable = 1;
-
-                hr = VariableSetNumeric(&variables, L"MyBurnVariable1", llMyBurnVariable, FALSE);
-                TestThrowOnFailure(hr, "Failed to set variable value 'MyBurnVariable1'.");
+                VariableSetNumericHelper(&variables, L"MyBurnVariable1", 1);
+                VariableSetStringHelper(&variables, L"MyBurnVariable2", NULL, FALSE);
+                VariableSetVersionHelper(&variables, L"MyBurnVariable3", L"v1.0-alpha");
 
                 // read interrupted resume type
                 hr = RegistrationDetectResumeType(&registration, &resumeType);
@@ -669,9 +672,20 @@ namespace Bootstrapper
                 TestThrowOnFailure(hr, L"Failed to write active resume mode.");
 
                 // find existing variable
-                hr = VariableGetNumeric(&variables, L"MyBurnVariable1", &llMyBurnVariable);
-                TestThrowOnFailure(hr, "Failed to find variable value 'MyBurnVariable1'.");
+                llMyBurnVariable = VariableGetNumericHelper(&variables, L"MyBurnVariable1");
+                
                 Assert::Equal((LONGLONG)42, llMyBurnVariable);
+                Assert::Equal(42, (Int32)Registry::GetValue(gcnew String(TEST_UNINSTALL_VARIABLES_KEY), gcnew String(L"MyBurnVariable2"), nullptr));
+
+                myBurnStringVariable = VariableGetStringHelper(&variables, L"MyBurnVariable2");
+
+                //
+                Assert::Equal<String^>(gcnew String(L"bar"), myBurnStringVariable);
+                Assert::Equal<String^>(gcnew String(L"bar"), (String^)Registry::GetValue(gcnew String(TEST_UNINSTALL_VARIABLES_KEY), gcnew String(L"MyBurnVariable2"), nullptr));
+
+                String^ myBurnVersionVariable = VariableGetVersionHelper(&variables, L"MyBurnVariable3");
+                Assert::Equal<String^>(gcnew String(L"v1.0-beta"), myBurnVersionVariable);
+                Assert::Equal<String^>(gcnew String(L"v1.0-beta"), (String^)Registry::GetValue(gcnew String(TEST_UNINSTALL_VARIABLES_KEY), gcnew String(L"MyBurnVariable3"), nullptr));
 
                 // verify that run key was put back
                 Assert::NotEqual((Object^)nullptr, Registry::GetValue(gcnew String(TEST_RUN_KEY), gcnew String(L"{D54F896D-1952-43e6-9C67-B5652240618C}"), nullptr));
