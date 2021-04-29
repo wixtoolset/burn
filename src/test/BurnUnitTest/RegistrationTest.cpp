@@ -630,6 +630,10 @@ namespace Bootstrapper
                 hr = RegistrationSaveState(&registration, pbBuffer, cbBuffer);
                 TestThrowOnFailure(hr, L"Failed to save state.");
 
+                ReleaseNullBuffer(pbBuffer);
+                cbBuffer = 0;
+                
+
                 // Munge variable so we know we reloaded
                 VariableSetNumericHelper(&variables, L"MyBurnVariable1", 1);
                 VariableSetStringHelper(&variables, L"MyBurnVariable2", NULL, FALSE);
@@ -655,8 +659,6 @@ namespace Bootstrapper
                 Assert::Equal((int)BOOTSTRAPPER_RESUME_TYPE_SUSPEND, (int)resumeType);
 
                 // read state back
-                cbBuffer = 0;
-
                 hr = RegistrationLoadState(&registration, &pbBuffer, &cbBuffer);
                 TestThrowOnFailure(hr, L"Failed to load state.");
 
@@ -675,7 +677,7 @@ namespace Bootstrapper
                 llMyBurnVariable = VariableGetNumericHelper(&variables, L"MyBurnVariable1");
                 
                 Assert::Equal((LONGLONG)42, llMyBurnVariable);
-                Assert::Equal(42, (Int32)Registry::GetValue(gcnew String(TEST_UNINSTALL_VARIABLES_KEY), gcnew String(L"MyBurnVariable2"), nullptr));
+                Assert::Equal<Int64>(42, (Int64)Registry::GetValue(gcnew String(TEST_UNINSTALL_VARIABLES_KEY), gcnew String(L"MyBurnVariable1"), nullptr));
 
                 myBurnStringVariable = VariableGetStringHelper(&variables, L"MyBurnVariable2");
 
@@ -684,8 +686,8 @@ namespace Bootstrapper
                 Assert::Equal<String^>(gcnew String(L"bar"), (String^)Registry::GetValue(gcnew String(TEST_UNINSTALL_VARIABLES_KEY), gcnew String(L"MyBurnVariable2"), nullptr));
 
                 String^ myBurnVersionVariable = VariableGetVersionHelper(&variables, L"MyBurnVariable3");
-                Assert::Equal<String^>(gcnew String(L"v1.0-beta"), myBurnVersionVariable);
-                Assert::Equal<String^>(gcnew String(L"v1.0-beta"), (String^)Registry::GetValue(gcnew String(TEST_UNINSTALL_VARIABLES_KEY), gcnew String(L"MyBurnVariable3"), nullptr));
+                Assert::Equal<String^>(gcnew String(L"1.0-beta"), myBurnVersionVariable);
+                // Assert::Equal<String^>(gcnew String(L"v1.0-beta"), (String^)Registry::GetValue(gcnew String(TEST_UNINSTALL_VARIABLES_KEY), gcnew String(L"MyBurnVariable3"), nullptr));
 
                 // verify that run key was put back
                 Assert::NotEqual((Object^)nullptr, Registry::GetValue(gcnew String(TEST_RUN_KEY), gcnew String(L"{D54F896D-1952-43e6-9C67-B5652240618C}"), nullptr));
@@ -702,6 +704,7 @@ namespace Bootstrapper
             }
             finally
             {
+                ReleaseBuffer(pbBuffer);
                 ReleaseStr(sczCurrentProcess);
                 ReleaseObject(pixeBundle);
                 UserExperienceUninitialize(&userExperience);

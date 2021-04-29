@@ -209,23 +209,13 @@ HRESULT RegistrationSaveState(
     __in_bcount_opt(cbBuffer) BYTE* pbBuffer,
     __in_opt SIZE_T cbBuffer
     );
-/*
-HRESULT RegistrationSaveVariables(
-    __in BURN_REGISTRATION* pRegistration,
-    __in BURN_VARIABLES* pVariables
-);
-*/
+
 HRESULT RegistrationLoadState(
     __in BURN_REGISTRATION* pRegistration,
     __out_bcount(*pcbBuffer) BYTE** ppbBuffer,
     __out SIZE_T* pcbBuffer
     );
-/*
-HRESULT RegistrationLoadVariables(
-    __in BURN_REGISTRATION* pRegistration,
-    __in BURN_VARIABLES* pVariables
-);
-*/
+
 HRESULT RegistrationGetResumeCommandLine(
     __in const BURN_REGISTRATION* pRegistration,
     __deref_out_z LPWSTR* psczResumeCommandLine
